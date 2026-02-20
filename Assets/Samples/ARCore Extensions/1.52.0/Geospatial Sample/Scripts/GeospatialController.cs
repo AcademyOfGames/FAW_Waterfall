@@ -430,6 +430,8 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
         /// </summary>
         public void Awake()
         {
+            Debug.Log("[GeospatialController] Awake() called - Initializing Geospatial AR");
+            
             // Lock screen to portrait.
             Screen.autorotateToLandscapeLeft = false;
             Screen.autorotateToLandscapeRight = false;
@@ -443,18 +445,31 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
 
             if (SessionOrigin == null)
             {
-                Debug.LogError("Cannot find ARSessionOrigin.");
+                Debug.LogError("[GeospatialController] Cannot find ARSessionOrigin.");
             }
 
             if (Session == null)
             {
-                Debug.LogError("Cannot find ARSession.");
+                Debug.LogError("[GeospatialController] Cannot find ARSession.");
             }
 
             if (ARCoreExtensions == null)
             {
-                Debug.LogError("Cannot find ARCoreExtensions.");
+                Debug.LogError("[GeospatialController] Cannot find ARCoreExtensions.");
             }
+
+#if UNITY_ANDROID
+            // Request fine location permission early
+            if (!Permission.HasUserAuthorizedPermission(Permission.FineLocation))
+            {
+                Debug.Log("[GeospatialController] Fine location permission not granted. Requesting permission in Awake().");
+                Permission.RequestUserPermission(Permission.FineLocation);
+            }
+            else
+            {
+                Debug.Log("[GeospatialController] Fine location permission already granted.");
+            }
+#endif
         }
 
         /// <summary>
@@ -462,6 +477,8 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
         /// </summary>
         public void OnEnable()
         {
+            Debug.Log("[GeospatialController] OnEnable() called - Starting location service and initialization");
+            
             _startLocationService = StartLocationService();
             StartCoroutine(_startLocationService);
 
@@ -493,13 +510,13 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
 
             if (StreetscapeGeometryManager == null)
             {
-                Debug.LogWarning("StreetscapeGeometryManager must be set in the " +
+                Debug.LogWarning("[GeospatialController] StreetscapeGeometryManager must be set in the " +
                     "GeospatialController Inspector to render StreetscapeGeometry.");
             }
 
             if (StreetscapeGeometryMaterialBuilding.Count == 0)
             {
-                Debug.LogWarning("StreetscapeGeometryMaterialBuilding in the " +
+                Debug.LogWarning("[GeospatialController] StreetscapeGeometryMaterialBuilding in the " +
                     "GeospatialController Inspector must contain at least one material " +
                     "to render StreetscapeGeometry.");
                 return;
@@ -507,7 +524,7 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
 
             if (StreetscapeGeometryMaterialTerrain == null)
             {
-                Debug.LogWarning("StreetscapeGeometryMaterialTerrain must be set in the " +
+                Debug.LogWarning("[GeospatialController] StreetscapeGeometryMaterialTerrain must be set in the " +
                     "GeospatialController Inspector to render StreetscapeGeometry.");
                 return;
             }
@@ -565,9 +582,26 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
                 return;
             }
 
+            // Log status periodically (every 2 seconds) to help debug
+            if (Time.frameCount % 120 == 0) // ~2 seconds at 60fps
+            {
+                Debug.Log($"[GeospatialController] Status Update - " +
+                    $"ARSession.state: {ARSession.state}, " +
+                    $"Location.status: {Input.location.status}, " +
+                    $"Location.isEnabledByUser: {Input.location.isEnabledByUser}, " +
+                    $"EarthState: {(EarthManager != null ? EarthManager.EarthState.ToString() : "null")}, " +
+                    $"EarthTrackingState: {(EarthManager != null ? EarthManager.EarthTrackingState.ToString() : "null")}, " +
+                    $"IsLocalizing: {_isLocalizing}, " +
+                    $"EnablingGeospatial: {_enablingGeospatial}");
+            }
+
             if (ARSession.state != ARSessionState.SessionInitializing &&
                 ARSession.state != ARSessionState.SessionTracking)
             {
+                if (Time.frameCount % 120 == 0)
+                {
+                    Debug.LogWarning($"[GeospatialController] AR Session not in valid state: {ARSession.state}");
+                }
                 return;
             }
 
@@ -576,15 +610,20 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
             switch (featureSupport)
             {
                 case FeatureSupported.Unknown:
+                    if (Time.frameCount % 120 == 0)
+                    {
+                        Debug.Log("[GeospatialController] Geospatial mode support: Unknown - waiting...");
+                    }
                     return;
                 case FeatureSupported.Unsupported:
+                    Debug.LogError("[GeospatialController] The Geospatial API is not supported by this device.");
                     ReturnWithReason("The Geospatial API is not supported by this device.");
                     return;
                 case FeatureSupported.Supported:
                     if (ARCoreExtensions.ARCoreExtensionsConfig.GeospatialMode ==
                         GeospatialMode.Disabled)
                     {
-                        Debug.Log("Geospatial sample switched to GeospatialMode.Enabled.");
+                        Debug.Log("[GeospatialController] Geospatial sample switched to GeospatialMode.Enabled.");
                         ARCoreExtensions.ARCoreExtensionsConfig.GeospatialMode =
                             GeospatialMode.Enabled;
                         ARCoreExtensions.ARCoreExtensionsConfig.StreetscapeGeometryMode =
@@ -603,10 +642,15 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
                 _configurePrepareTime -= Time.deltaTime;
                 if (_configurePrepareTime < 0)
                 {
+                    Debug.Log("[GeospatialController] Geospatial configuration preparation complete.");
                     _enablingGeospatial = false;
                 }
                 else
                 {
+                    if (Time.frameCount % 120 == 0)
+                    {
+                        Debug.Log($"[GeospatialController] Waiting for geospatial configuration to take effect. Time remaining: {_configurePrepareTime:F2}s");
+                    }
                     return;
                 }
             }
@@ -615,6 +659,10 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
             var earthState = EarthManager.EarthState;
             if (earthState == EarthState.ErrorEarthNotReady)
             {
+                if (Time.frameCount % 120 == 0)
+                {
+                    Debug.Log("[GeospatialController] Earth not ready - waiting for initialization...");
+                }
                 SnackBarText.text = _localizationInitializingMessage;
                 return;
             }
@@ -622,7 +670,7 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
             {
                 string errorMessage =
                     "Geospatial sample encountered an EarthState error: " + earthState;
-                Debug.LogWarning(errorMessage);
+                Debug.LogWarning($"[GeospatialController] {errorMessage}");
                 SnackBarText.text = errorMessage;
                 return;
             }
@@ -633,13 +681,25 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
             var earthTrackingState = EarthManager.EarthTrackingState;
             var pose = earthTrackingState == TrackingState.Tracking ?
                 EarthManager.CameraGeospatialPose : new GeospatialPose();
+            
+            // Log detailed status when not ready
             if (!isSessionReady || earthTrackingState != TrackingState.Tracking ||
                 pose.OrientationYawAccuracy > _orientationYawAccuracyThreshold ||
                 pose.HorizontalAccuracy > _horizontalAccuracyThreshold)
             {
+                if (Time.frameCount % 120 == 0)
+                {
+                    Debug.Log($"[GeospatialController] Localization not ready - " +
+                        $"isSessionReady: {isSessionReady} (ARSession.state: {ARSession.state}, Location.status: {Input.location.status}), " +
+                        $"earthTrackingState: {earthTrackingState}, " +
+                        $"OrientationYawAccuracy: {pose.OrientationYawAccuracy:F2}° (threshold: {_orientationYawAccuracyThreshold}°), " +
+                        $"HorizontalAccuracy: {pose.HorizontalAccuracy:F2}m (threshold: {_horizontalAccuracyThreshold}m)");
+                }
+                
                 // Lost localization during the session.
                 if (!_isLocalizing)
                 {
+                    Debug.Log("[GeospatialController] Lost localization - re-entering localizing state");
                     _isLocalizing = true;
                     _localizationPassedTime = 0f;
                     GeometryToggle.gameObject.SetActive(false);
@@ -657,7 +717,7 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
 
                 if (_localizationPassedTime > _timeoutSeconds)
                 {
-                    Debug.LogError("Geospatial sample localization timed out.");
+                    Debug.LogError("[GeospatialController] Geospatial sample localization timed out.");
                     ReturnWithReason(_localizationFailureMessage);
                 }
                 else
@@ -669,6 +729,7 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
             else if (_isLocalizing)
             {
                 // Finished localization.
+                Debug.Log("[GeospatialController] Localization completed successfully!");
                 _isLocalizing = false;
                 _localizationPassedTime = 0f;
                 GeometryToggle.gameObject.SetActive(true);
@@ -1312,36 +1373,65 @@ namespace Google.XR.ARCoreExtensions.Samples.Geospatial
 
         private IEnumerator StartLocationService()
         {
+            Debug.Log("[GeospatialController] StartLocationService() coroutine started");
             _waitingForLocationService = true;
 #if UNITY_ANDROID
             if (!Permission.HasUserAuthorizedPermission(Permission.FineLocation))
             {
-                Debug.Log("Requesting the fine location permission.");
+                Debug.Log("[GeospatialController] Fine location permission not granted. Requesting permission...");
                 Permission.RequestUserPermission(Permission.FineLocation);
                 yield return new WaitForSeconds(3.0f);
+                
+                // Check permission status after waiting
+                if (Permission.HasUserAuthorizedPermission(Permission.FineLocation))
+                {
+                    Debug.Log("[GeospatialController] Fine location permission granted!");
+                }
+                else
+                {
+                    Debug.LogWarning("[GeospatialController] Fine location permission was denied or not yet granted.");
+                }
+            }
+            else
+            {
+                Debug.Log("[GeospatialController] Fine location permission already granted.");
             }
 #endif
 
             if (!Input.location.isEnabledByUser)
             {
-                Debug.Log("Location service is disabled by the user.");
+                Debug.LogError("[GeospatialController] Location service is disabled by the user. Please enable location services in device settings.");
                 _waitingForLocationService = false;
                 yield break;
             }
 
-            Debug.Log("Starting location service.");
-            Input.location.Start();
+            Debug.Log("[GeospatialController] Starting location service...");
+            Input.location.Start(10.0f, 10.0f); // Start with 10m accuracy, 10m update distance
 
-            while (Input.location.status == LocationServiceStatus.Initializing)
+            int maxWaitTime = 20; // Maximum 20 seconds to wait
+            int waitCount = 0;
+            while (Input.location.status == LocationServiceStatus.Initializing && waitCount < maxWaitTime * 60)
             {
                 yield return null;
+                waitCount++;
+                if (waitCount % 60 == 0) // Log every second
+                {
+                    Debug.Log($"[GeospatialController] Location service initializing... ({waitCount / 60}s)");
+                }
             }
 
             _waitingForLocationService = false;
-            if (Input.location.status != LocationServiceStatus.Running)
+            
+            if (Input.location.status == LocationServiceStatus.Running)
             {
-                Debug.LogWarningFormat(
-                    "Location service ended with {0} status.", Input.location.status);
+                Debug.Log($"[GeospatialController] Location service started successfully! " +
+                    $"Lat: {Input.location.lastData.latitude:F6}, " +
+                    $"Lng: {Input.location.lastData.longitude:F6}, " +
+                    $"Accuracy: {Input.location.lastData.horizontalAccuracy}m");
+            }
+            else
+            {
+                Debug.LogError($"[GeospatialController] Location service failed to start. Status: {Input.location.status}");
                 Input.location.Stop();
             }
         }
