@@ -6,17 +6,29 @@ EditorBuildSettings:
   serializedVersion: 2
   m_Scenes:
   - enabled: 0
+    path: Assets/Scenes/StartScene.unity
+    guid: 0463fa934a2cf4944a7bca8357863fdb
+  - enabled: 1
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
-  - enabled: 1
-    path: Assets/Samples/ARCore Extensions/1.52.0/Geospatial Sample/Scenes/GeospatialArf4.unity
-    guid: 1ed15e9657253406185e4b2c7c5a4fc4
+  - enabled: 0
+    path: Assets/Scenes/ChenoaScene.unity
+    guid: 757ffdeed9915be479120827bb9783d6
+  - enabled: 0
+    path: Assets/Scenes/DanScene.unity
+    guid: a406e282be8741c44b200078ae80984b
+  - enabled: 0
+    path: Assets/Scenes/benaroyaScene.unity
+    guid: 9f387381f11ef90499c08009d7412cb5
+  - enabled: 0
+    path: Assets/Scenes/SampleSceneHousePos.unity
+    guid: 9d3a8b2eb8e7a004cb512f3b998a2612
   m_configObjects:
-    UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: 8012463becc9cc244978d1a6f24b6379,
+    UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: d03d372fc92c8444584da0a60b01e7b3,
       type: 2}
-    UnityEditor.XR.ARKit.ARKitSettings: {fileID: 11400000, guid: 3393720db410a1c41b7175fc7d001256,
+    UnityEditor.XR.ARKit.ARKitSettings: {fileID: 11400000, guid: 3654fa7380e3130498b9bb060d663187,
       type: 2}
-    com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: 968b1ebef3a3c3f4cb3d7b7757e1e268,
+    com.unity.xr.arfoundation.simulation_settings: {fileID: 11400000, guid: 4d85da1eace0d5b40b3e126900036b58,
       type: 2}
-    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: ba0ad1c6833602a4286fa1761f60f9bb,
+    com.unity.xr.management.loader_settings: {fileID: 11400000, guid: 4ce52f3b88187134f8374d286a442d26,
       type: 2}
