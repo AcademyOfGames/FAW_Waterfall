@@ -2,52 +2,52 @@ using System.Collections.Generic;
 using UnityEngine;
 
 /// <summary>
-/// Scales each object in the band lists based on frequency analyzer amplitude: from initial scale to max scale and back.
+/// Scales objects per band from <see cref="FrequencyAnalyzer"/>, left list = lowest frequencies → right = highest.
+/// Order: SubBass, Bass, LowMid, Mid, HighMid, High.
 /// </summary>
 public class FrequencyBandVisualizer : MonoBehaviour
 {
-    [System.Serializable]
-    public class BandObjectList
-    {
-        public List<GameObject> objects = new List<GameObject>();
-    }
-
-    [Header("Frequency Source")]
     [SerializeField] private FrequencyAnalyzer frequencyAnalyzer;
 
-    [Header("Band Objects")]
-    [Tooltip("SubBass, Bass, LowMid, Mid, HighMid, High. Each band can have multiple objects.")]
-    [SerializeField] private BandObjectList[] bands = new BandObjectList[6];
+    [SerializeField] private List<GameObject> subBass = new List<GameObject>();
+    [SerializeField] private List<GameObject> bass = new List<GameObject>();
+    [SerializeField] private List<GameObject> lowMid = new List<GameObject>();
+    [SerializeField] private List<GameObject> mid = new List<GameObject>();
+    [SerializeField] private List<GameObject> highMid = new List<GameObject>();
+    [SerializeField] private List<GameObject> high = new List<GameObject>();
 
-    [Header("Scale")]
-    [SerializeField] private float maxScale = 3.5f;
-    [SerializeField] [Range(0.3f, 2f)] private float visibilityCurve = 0.65f;
-    [SerializeField] private float decayTime = 0.2f;
-    [SerializeField] private float growSpeed = 25f;
-    [Tooltip("How quickly target values smooth. Lower = smoother but slower response.")]
-    [SerializeField] [Range(2f, 30f)] private float smoothness = 12f;
+    private const float MaxScale = 3f;
+    private const float VisibilityPower = 0.65f;
+    private const float DeadZone = 0.025f;
+    private const float RestEpsilon = 0.006f;
+    private const float DecaySeconds = 0.22f;
+    private const float GrowSpeed = 22f;
+    private const float TargetSmooth = 14f;
 
-    private float[] _currentScales;
-    private float[] _smoothedTargets;
+    private const int BandCount = 6;
+
+    private List<GameObject>[] _bands;
     private List<Vector3>[] _initialScales;
+    private float[] _current;
+    private float[] _targetSmoothed;
 
     private void Awake()
     {
         if (frequencyAnalyzer == null)
             frequencyAnalyzer = FindObjectOfType<FrequencyAnalyzer>();
 
-        _currentScales = new float[6];
-        _smoothedTargets = new float[6];
-        _initialScales = new List<Vector3>[6];
+        _bands = new[] { subBass, bass, lowMid, mid, highMid, high };
+        _initialScales = new List<Vector3>[BandCount];
+        _current = new float[BandCount];
+        _targetSmoothed = new float[BandCount];
 
-        if (bands == null) bands = new BandObjectList[6];
-
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < BandCount; i++)
         {
             _initialScales[i] = new List<Vector3>();
-            if (i >= bands.Length || bands[i] == null || bands[i].objects == null) continue;
+            var list = _bands[i];
+            if (list == null) continue;
 
-            foreach (GameObject obj in bands[i].objects)
+            foreach (GameObject obj in list)
             {
                 if (obj != null)
                     _initialScales[i].Add(obj.transform.localScale);
@@ -57,37 +57,48 @@ public class FrequencyBandVisualizer : MonoBehaviour
 
     private void Update()
     {
-        if (frequencyAnalyzer == null) return;
+        if (frequencyAnalyzer == null)
+            return;
 
-        for (int i = 0; i < 6; i++)
+        for (int i = 0; i < BandCount; i++)
         {
-            if (bands == null || i >= bands.Length || bands[i] == null || bands[i].objects == null) continue;
+            var list = _bands[i];
+            if (list == null)
+                continue;
 
-            float bandValue = frequencyAnalyzer.GetBandValue((FrequencyAnalyzer.FrequencyBand)i);
-            float boosted = Mathf.Pow(bandValue, visibilityCurve);
-            float targetScale = boosted * maxScale;
+            float v = frequencyAnalyzer.GetBandValue((FrequencyAnalyzer.FrequencyBand)i);
+            if (v < DeadZone)
+                v = 0f;
 
-            _smoothedTargets[i] = Mathf.Lerp(_smoothedTargets[i], targetScale, smoothness * Time.deltaTime);
+            float drive = Mathf.Pow(v, VisibilityPower) * MaxScale;
+            _targetSmoothed[i] = Mathf.Lerp(_targetSmoothed[i], drive, TargetSmooth * Time.deltaTime);
 
-            if (_smoothedTargets[i] > _currentScales[i])
-                _currentScales[i] = Mathf.Lerp(_currentScales[i], _smoothedTargets[i], growSpeed * Time.deltaTime);
+            if (_targetSmoothed[i] > _current[i])
+                _current[i] = Mathf.Lerp(_current[i], _targetSmoothed[i], GrowSpeed * Time.deltaTime);
             else
             {
-                float decayFactor = Mathf.Exp(-4.6f * Time.deltaTime / decayTime);
-                _currentScales[i] *= decayFactor;
-                if (_currentScales[i] < 0.001f) _currentScales[i] = 0f;
+                float k = Mathf.Exp(-4.6f * Time.deltaTime / DecaySeconds);
+                _current[i] *= k;
+                if (_current[i] < RestEpsilon)
+                    _current[i] = 0f;
             }
 
-            float scaleFactor = Mathf.Max(0.001f, _currentScales[i]);
+            bool rest = _current[i] <= 0f;
+            float mul = rest ? 0f : _current[i];
 
-            int scaleIdx = 0;
-            foreach (GameObject obj in bands[i].objects)
+            int idx = 0;
+            foreach (GameObject obj in list)
             {
-                if (obj == null) continue;
-                if (scaleIdx >= _initialScales[i].Count) break;
+                if (obj == null)
+                    continue;
+                if (idx >= _initialScales[i].Count)
+                    break;
 
-                obj.transform.localScale = _initialScales[i][scaleIdx] * scaleFactor;
-                scaleIdx++;
+                obj.transform.localScale = rest
+                    ? _initialScales[i][idx]
+                    : _initialScales[i][idx] * mul;
+
+                idx++;
             }
         }
     }

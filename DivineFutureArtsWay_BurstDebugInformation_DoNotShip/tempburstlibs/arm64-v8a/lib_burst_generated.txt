@@ -11,7 +11,7 @@ Library: E:\Dev\Unity\GeoSpatialWaterfall\Temp\BurstOutput\tempburstlibs\arm64-v
 --float-mode=Fast
 --generate-link-xml=Temp\burst.link.xml
 --temp-folder=E:\Dev\Unity\GeoSpatialWaterfall\Temp\Burst
---key-folder=C:/Program Files/Unity/Hub/Editor/2022.3.60f1/Editor/Data/PlaybackEngines/AndroidPlayer
+--key-folder=E:/Programs/UnityEditors/2022.3.62f3/Editor/Data/PlaybackEngines/AndroidPlayer
 --decode-folder=E:\Dev\Unity\GeoSpatialWaterfall\Library\Burst
 --output=E:\Dev\Unity\GeoSpatialWaterfall\Temp\BurstOutput\tempburstlibs\arm64-v8a\lib_burst_generated
 --pdb-search-paths=Temp/ManagedSymbols/
@@ -28,7 +28,7 @@ Library: E:\Dev\Unity\GeoSpatialWaterfall\Temp\BurstOutput\tempburstlibs\arm64-v
 --target-framework=NetFramework
 --generate-link-xml=Temp\burst.link.xml
 --temp-folder=E:\Dev\Unity\GeoSpatialWaterfall\Temp\Burst
---key-folder=C:/Program Files/Unity/Hub/Editor/2022.3.60f1/Editor/Data/PlaybackEngines/AndroidPlayer
+--key-folder=E:/Programs/UnityEditors/2022.3.62f3/Editor/Data/PlaybackEngines/AndroidPlayer
 --decode-folder=E:\Dev\Unity\GeoSpatialWaterfall\Library\Burst
 --output=E:\Dev\Unity\GeoSpatialWaterfall\Temp\BurstOutput\tempburstlibs\arm64-v8a\lib_burst_generated
 --pdb-search-paths=Temp/ManagedSymbols/

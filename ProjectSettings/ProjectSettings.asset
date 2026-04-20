@@ -13,7 +13,7 @@ PlayerSettings:
   useOnDemandResources: 0
   accelerometerFrequency: 60
   companyName: FutureArts
-  productName: DivineFutureArtsWay
+  productName: FAWChenoa
   defaultCursor: {fileID: 0}
   cursorHotspot: {x: 0, y: 0}
   m_SplashScreenBackgroundColor: {r: 0.13725491, g: 0.12156863, b: 0.1254902, a: 1}
@@ -77,6 +77,7 @@ PlayerSettings:
   androidMinimumWindowHeight: 300
   androidFullscreenMode: 1
   androidAutoRotationBehavior: 1
+  androidPredictiveBackSupport: 1
   defaultIsNativeResolution: 1
   macRetinaSupport: 1
   runInBackground: 0
@@ -140,7 +141,7 @@ PlayerSettings:
   loadStoreDebugModeEnabled: 0
   visionOSBundleVersion: 1.0
   tvOSBundleVersion: 1.0
-  bundleVersion: 0.1.2InLocationTest
+  bundleVersion: 1.0
   preloadedAssets:
   - {fileID: 11400000, guid: 6ba5db84343ecbe4da8296ca1603aac2, type: 2}
   metroInputSource: 0
@@ -259,12 +260,12 @@ PlayerSettings:
   templateDefaultScene: Assets/Scenes/SampleScene.unity
   useCustomMainManifest: 0
   useCustomLauncherManifest: 0
-  useCustomMainGradleTemplate: 0
+  useCustomMainGradleTemplate: 1
   useCustomLauncherGradleManifest: 0
   useCustomBaseGradleTemplate: 0
-  useCustomGradlePropertiesTemplate: 0
-  useCustomGradleSettingsTemplate: 0
-  useCustomProguardFile: 0
+  useCustomGradlePropertiesTemplate: 1
+  useCustomGradleSettingsTemplate: 1
+  useCustomProguardFile: 1
   AndroidTargetArchitectures: 3
   AndroidTargetDevices: 0
   AndroidSplashScreenScale: 0
@@ -925,7 +926,10 @@ PlayerSettings:
   windowsGamepadBackendHint: 0
   cloudProjectId: 46a2a90e-810b-4d75-866c-4f476387f3d3
   framebufferDepthMemorylessMode: 0
-  qualitySettingsNames: []
+  qualitySettingsNames:
+  - Performant
+  - Balanced
+  - High Fidelity
   projectName: GeoSpatialWaterfall
   organizationId: jose-contreras-582279
   cloudEnabled: 0

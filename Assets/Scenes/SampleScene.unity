@@ -136,7 +136,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &32573413
 Transform:
@@ -166,6 +166,10 @@ PrefabInstance:
     - target: {fileID: 171314, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder2 (2)
+      objectReference: {fileID: 0}
+    - target: {fileID: 171314, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 463262, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
       propertyPath: m_LocalScale.x
@@ -340,52 +344,52 @@ PrefabInstance:
     - target: {fileID: 2769610736983052565, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: -6.53
+      value: -1.0899982
       objectReference: {fileID: 0}
     - target: {fileID: 2769610736983052565, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: -24.76
+      value: -29.6
       objectReference: {fileID: 0}
     - target: {fileID: 2769610736983052565, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: m_LocalPosition.z
-      value: -12.98
+      value: -15.540001
       objectReference: {fileID: 0}
     - target: {fileID: 2769610736983052565, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: m_LocalRotation.w
-      value: -0.6479579
+      value: 0.6964618
       objectReference: {fileID: 0}
     - target: {fileID: 2769610736983052565, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: m_LocalRotation.x
-      value: -0.62379694
+      value: -0.69646186
       objectReference: {fileID: 0}
     - target: {fileID: 2769610736983052565, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: m_LocalRotation.y
-      value: 0.29739338
+      value: -0.12223318
       objectReference: {fileID: 0}
     - target: {fileID: 2769610736983052565, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: m_LocalRotation.z
-      value: -0.32028925
+      value: -0.12223314
       objectReference: {fileID: 0}
     - target: {fileID: 2769610736983052565, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
-      value: -267.303
+      value: -90
       objectReference: {fileID: 0}
     - target: {fileID: 2769610736983052565, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: m_LocalEulerAnglesHint.y
-      value: -162.446
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2769610736983052565, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: m_LocalEulerAnglesHint.z
-      value: -110.634
+      value: -19.909
       objectReference: {fileID: 0}
     - target: {fileID: 2877516352433575598, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
@@ -465,7 +469,7 @@ PrefabInstance:
     - target: {fileID: 2877516352433575598, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: ShapeModule.m_Scale.y
-      value: -0.29
+      value: 0.3
       objectReference: {fileID: 0}
     - target: {fileID: 2877516352433575598, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
@@ -550,7 +554,7 @@ PrefabInstance:
     - target: {fileID: 2877516352433575598, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
       propertyPath: InitialModule.startSize.scalar
-      value: 2.03
+      value: 3
       objectReference: {fileID: 0}
     - target: {fileID: 2877516352433575598, guid: 0e2ec4ef7fccc5849a4d83926092cd7d,
         type: 3}
@@ -921,7 +925,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &189417285
 Transform:
@@ -1400,7 +1404,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &381941991
 Transform:
@@ -1430,6 +1434,10 @@ PrefabInstance:
     - target: {fileID: 100874, guid: fa9fc1efb41cb8341861d00bc33fa878, type: 3}
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder4 (3)
+      objectReference: {fileID: 0}
+    - target: {fileID: 100874, guid: fa9fc1efb41cb8341861d00bc33fa878, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 435596, guid: fa9fc1efb41cb8341861d00bc33fa878, type: 3}
       propertyPath: m_LocalScale.x
@@ -1505,6 +1513,10 @@ PrefabInstance:
     - target: {fileID: 176942, guid: 4b1aea5082805a246b7a8abb21701da7, type: 3}
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder1
+      objectReference: {fileID: 0}
+    - target: {fileID: 176942, guid: 4b1aea5082805a246b7a8abb21701da7, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 437918, guid: 4b1aea5082805a246b7a8abb21701da7, type: 3}
       propertyPath: m_LocalScale.x
@@ -1586,7 +1598,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &526106534
 Transform:
@@ -1675,74 +1687,6 @@ MeshFilter:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 526106533}
   m_Mesh: {fileID: 10209, guid: 0000000000000000e000000000000000, type: 0}
---- !u!1001 &529847519
-PrefabInstance:
-  m_ObjectHideFlags: 0
-  serializedVersion: 2
-  m_Modification:
-    serializedVersion: 3
-    m_TransformParent: {fileID: 0}
-    m_Modifications:
-    - target: {fileID: -8679921383154817045, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_LocalPosition.x
-      value: 14.122475
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_LocalPosition.y
-      value: -25.67
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_LocalPosition.z
-      value: -41.616684
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_LocalRotation.w
-      value: 1
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_LocalRotation.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_LocalRotation.y
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_LocalRotation.z
-      value: -0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.x
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.y
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: -8679921383154817045, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_LocalEulerAnglesHint.z
-      value: 0
-      objectReference: {fileID: 0}
-    - target: {fileID: 919132149155446097, guid: dfecb7379c3957141a245d1f1c0ec076,
-        type: 3}
-      propertyPath: m_Name
-      value: cedar_arranged
-      objectReference: {fileID: 0}
-    m_RemovedComponents: []
-    m_RemovedGameObjects: []
-    m_AddedGameObjects: []
-    m_AddedComponents: []
-  m_SourcePrefab: {fileID: 100100000, guid: dfecb7379c3957141a245d1f1c0ec076, type: 3}
 --- !u!1 &542635534
 GameObject:
   m_ObjectHideFlags: 0
@@ -11780,6 +11724,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder4
       objectReference: {fileID: 0}
+    - target: {fileID: 100874, guid: fa9fc1efb41cb8341861d00bc33fa878, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
     - target: {fileID: 435596, guid: fa9fc1efb41cb8341861d00bc33fa878, type: 3}
       propertyPath: m_LocalScale.x
       value: 7.1618543
@@ -12070,7 +12018,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &792796508
 Transform:
@@ -21832,6 +21780,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder2
       objectReference: {fileID: 0}
+    - target: {fileID: 171314, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
     - target: {fileID: 463262, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
       propertyPath: m_LocalScale.x
       value: 7.5735216
@@ -21909,7 +21861,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &872335261
 Transform:
@@ -27379,6 +27331,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder4 (1)
       objectReference: {fileID: 0}
+    - target: {fileID: 100874, guid: fa9fc1efb41cb8341861d00bc33fa878, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
     - target: {fileID: 435596, guid: fa9fc1efb41cb8341861d00bc33fa878, type: 3}
       propertyPath: m_LocalScale.x
       value: 2.224257
@@ -27453,6 +27409,10 @@ PrefabInstance:
     - target: {fileID: 176942, guid: 4b1aea5082805a246b7a8abb21701da7, type: 3}
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder1 (2)
+      objectReference: {fileID: 0}
+    - target: {fileID: 176942, guid: 4b1aea5082805a246b7a8abb21701da7, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 437918, guid: 4b1aea5082805a246b7a8abb21701da7, type: 3}
       propertyPath: m_LocalScale.x
@@ -27534,7 +27494,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &1129798534
 Transform:
@@ -27634,6 +27594,10 @@ PrefabInstance:
     - target: {fileID: 171314, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder2 (4)
+      objectReference: {fileID: 0}
+    - target: {fileID: 171314, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 463262, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
       propertyPath: m_LocalScale.x
@@ -32542,7 +32506,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &1177430524
 Transform:
@@ -32584,6 +32548,10 @@ PrefabInstance:
     - target: {fileID: 116492, guid: df141bf01b46c234699259417a18dc99, type: 3}
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder3 (1)
+      objectReference: {fileID: 0}
+    - target: {fileID: 116492, guid: df141bf01b46c234699259417a18dc99, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 493264, guid: df141bf01b46c234699259417a18dc99, type: 3}
       propertyPath: m_LocalScale.x
@@ -32665,7 +32633,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &1209101522
 Transform:
@@ -32901,7 +32869,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &1405355814
 Transform:
@@ -33005,6 +32973,10 @@ PrefabInstance:
     - target: {fileID: 176942, guid: 4b1aea5082805a246b7a8abb21701da7, type: 3}
       propertyPath: m_IsActive
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 176942, guid: 4b1aea5082805a246b7a8abb21701da7, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 437918, guid: 4b1aea5082805a246b7a8abb21701da7, type: 3}
       propertyPath: m_LocalScale.x
@@ -38029,6 +38001,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder2 (1)
       objectReference: {fileID: 0}
+    - target: {fileID: 171314, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
     - target: {fileID: 463262, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
       propertyPath: m_LocalScale.x
       value: 3.95868
@@ -38109,7 +38085,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &1645988723
 Transform:
@@ -38501,6 +38477,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder2 (5)
       objectReference: {fileID: 0}
+    - target: {fileID: 171314, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
     - target: {fileID: 463262, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
       propertyPath: m_LocalScale.x
       value: 5.988295
@@ -38578,7 +38558,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &1737868682
 Transform:
@@ -38620,7 +38600,7 @@ GameObject:
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
+  m_StaticEditorFlags: 2147483647
   m_IsActive: 1
 --- !u!4 &1874330108
 Transform:
@@ -38720,6 +38700,10 @@ PrefabInstance:
     - target: {fileID: 100874, guid: fa9fc1efb41cb8341861d00bc33fa878, type: 3}
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder4 (2)
+      objectReference: {fileID: 0}
+    - target: {fileID: 100874, guid: fa9fc1efb41cb8341861d00bc33fa878, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 435596, guid: fa9fc1efb41cb8341861d00bc33fa878, type: 3}
       propertyPath: m_LocalScale.x
@@ -38933,6 +38917,10 @@ PrefabInstance:
       propertyPath: m_Name
       value: 2K_Sandstone_Boulder2 (3)
       objectReference: {fileID: 0}
+    - target: {fileID: 171314, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
+      propertyPath: m_StaticEditorFlags
+      value: 2147483647
+      objectReference: {fileID: 0}
     - target: {fileID: 463262, guid: d1fcdc7b7c9cc6d4ea0928c33b806a4b, type: 3}
       propertyPath: m_LocalScale.x
       value: 3.95868
@@ -39011,12 +38999,12 @@ PrefabInstance:
     - target: {fileID: 1687765591583869861, guid: 60d957dd91cfeaa4cb09cc0e64fa857e,
         type: 3}
       propertyPath: m_Name
-      value: Cube
+      value: Invisicube
       objectReference: {fileID: 0}
     - target: {fileID: 1840637019229061973, guid: 60d957dd91cfeaa4cb09cc0e64fa857e,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: -0.00000017268
+      value: -0.00000006479
       objectReference: {fileID: 0}
     - target: {fileID: 1840637019229061973, guid: 60d957dd91cfeaa4cb09cc0e64fa857e,
         type: 3}
@@ -39114,7 +39102,7 @@ PrefabInstance:
     - target: {fileID: 2400178552793761922, guid: 340d2dd89dd6c1f4f82ee1b5342219de,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: -28.45
+      value: -28.71
       objectReference: {fileID: 0}
     - target: {fileID: 2400178552793761922, guid: 340d2dd89dd6c1f4f82ee1b5342219de,
         type: 3}
@@ -39164,7 +39152,7 @@ PrefabInstance:
     - target: {fileID: 2709733753163940777, guid: 340d2dd89dd6c1f4f82ee1b5342219de,
         type: 3}
       propertyPath: m_StaticEditorFlags
-      value: 0
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 3027814237607612984, guid: 340d2dd89dd6c1f4f82ee1b5342219de,
         type: 3}
@@ -39174,12 +39162,12 @@ PrefabInstance:
     - target: {fileID: 3027814237607612984, guid: 340d2dd89dd6c1f4f82ee1b5342219de,
         type: 3}
       propertyPath: m_StaticEditorFlags
-      value: 0
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 3293176534928112732, guid: 340d2dd89dd6c1f4f82ee1b5342219de,
         type: 3}
       propertyPath: m_StaticEditorFlags
-      value: 0
+      value: 2147483647
       objectReference: {fileID: 0}
     - target: {fileID: 8591634233864200262, guid: 340d2dd89dd6c1f4f82ee1b5342219de,
         type: 3}
@@ -39214,4 +39202,3 @@ SceneRoots:
   - {fileID: 1521820513}
   - {fileID: 1388839054}
   - {fileID: 757818637}
-  - {fileID: 529847519}
