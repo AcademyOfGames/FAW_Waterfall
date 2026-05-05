@@ -27,8 +27,8 @@ public class FrequencyAnalyzer : MonoBehaviour
         High
     }
 
-    private const int SpectrumSize = 2048;
-    private const FFTWindow FftWindow = FFTWindow.Hamming;
+    private const int SpectrumSize = 4096;
+    private const FFTWindow FftWindow = FFTWindow.BlackmanHarris;
     private const float Smoothing = 0.88f;
     private const float ResponseCurve = 0.72f;
     private const float PeakRiseSpeed = 8f;
