@@ -17,6 +17,11 @@ public class FrequencyAnalyzer : MonoBehaviour
     public float HighMid { get; private set; }
     public float High { get; private set; }
 
+    /// <summary>
+    /// Current playback time in seconds (for syncing visuals). Use when the analyzer drives a playing <see cref="AudioSource"/>.
+    /// </summary>
+    public float PlaybackTimeSeconds => audioSource != null ? audioSource.time : 0f;
+
     public enum FrequencyBand
     {
         SubBass,

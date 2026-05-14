@@ -1,0 +1,9 @@
+# Wavefront Object Material File
+# Generated using SpeedTree tools
+
+newmtl Marigold_Patch_Mat
+map_Kd Marigold_Patch_Color.png
+map_bump Marigold_Patch_Normal.png
+bump Marigold_Patch_Normal.png -bm 1
+
+

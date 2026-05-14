@@ -116,6 +116,11 @@ namespace Google.XR.ARCoreExtensions.GeospatialCreator
         private ARAnchorManager _anchorManager = null;
 
 #if !UNITY_EDITOR
+        // Throttle "waiting for stability" logs so device logs stay readable.
+        private static float _lastEarthStabilityDebugLogTime = -100f;
+        private const float _earthStabilityDebugLogIntervalSeconds = 2f;
+        private static bool _loggedMissingARCoreExtensionsInstance;
+
         private AnchorResolutionState _anchorResolution = AnchorResolutionState.NotStarted;
 
         private enum AnchorResolutionState
@@ -661,6 +666,15 @@ namespace Google.XR.ARCoreExtensions.GeospatialCreator
             {
                 // A null instance indicates there was some error initializing ARCore, which was
                 // already logged elsewhere.
+                if (!_loggedMissingARCoreExtensionsInstance)
+                {
+                    _loggedMissingARCoreExtensionsInstance = true;
+                    Debug.LogWarning(
+                        "[ARGeospatialCreatorAnchor] ARCoreExtensions._instance is null - " +
+                        "Geospatial anchors cannot resolve. Check that ARCore Extensions is in the " +
+                        "scene and initializes before anchors run.");
+                }
+
                 return;
             }
 
@@ -669,6 +683,16 @@ namespace Google.XR.ARCoreExtensions.GeospatialCreator
             // During boot this will return false a few times.
             if (sessionHandle == IntPtr.Zero)
             {
+                if (Time.unscaledTime >= _lastEarthStabilityDebugLogTime + _earthStabilityDebugLogIntervalSeconds)
+                {
+                    _lastEarthStabilityDebugLogTime = Time.unscaledTime;
+                    Debug.Log(
+                        "[ARGeospatialCreatorAnchor] ARCore session handle is still zero " +
+                        "(session not bound yet). ARSession.state=" + ARSession.state +
+                        ", notTrackingReason=" + ARSession.notTrackingReason +
+                        " (anchor: " + name + ").");
+                }
+
                 return;
             }
 
@@ -676,7 +700,18 @@ namespace Google.XR.ARCoreExtensions.GeospatialCreator
             // https://developers.google.com/ar/develop/unity-arf/geospatial/geospatial-anchors#place_a_geospatial_anchor_in_the_real_world
             if (EarthApi.GetEarthTrackingState(sessionHandle) != TrackingState.Tracking)
             {
-                Debug.Log("Waiting for AR Session to become stable.");
+                if (Time.unscaledTime >= _lastEarthStabilityDebugLogTime + _earthStabilityDebugLogIntervalSeconds)
+                {
+                    _lastEarthStabilityDebugLogTime = Time.unscaledTime;
+                    var earthTracking = EarthApi.GetEarthTrackingState(sessionHandle);
+                    Debug.Log(
+                        "[ARGeospatialCreatorAnchor] Waiting for Earth tracking (need Tracking). " +
+                        "EarthTrackingState=" + earthTracking +
+                        ", ARSession.state=" + ARSession.state +
+                        ", notTrackingReason=" + ARSession.notTrackingReason +
+                        ", anchor=" + name + ".");
+                }
+
                 return;
             }
 
