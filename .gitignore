@@ -75,3 +75,5 @@ crashlytics-build.properties
 /FawBenaroyaTest_may13_BackUpThisFolder_ButDontShipItWithYourGame
 *.tgz
 *.zip
+/FAW_Main_BackUpThisFolder_ButDontShipItWithYourGame
+FutureArtsWay_BurstDebugInformation_DoNotShip/tempburstlibs/arm64-v8a/lib_burst_generated.txt
