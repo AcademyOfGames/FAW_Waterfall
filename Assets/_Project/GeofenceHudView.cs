@@ -6,14 +6,15 @@ using UnityEngine;
 /// </summary>
 public class GeofenceHudView : MonoBehaviour
 {
+    /// <summary>At or inside this distance (km), status shows arrival copy instead of distance.</summary>
+    public const double ArrivalDistanceKm = 0.08;
+
     [SerializeField] private TextMeshProUGUI statusLine;
     [SerializeField] private TextMeshProUGUI messageLine;
     [Tooltip("In-range loading panel; Geofence Experience Coordinator may show/hide this same object while downloading.")]
     [SerializeField] private GameObject loadingWidgetRoot;
-    [Tooltip("Log when HUD text is set — use with Android logcat / Xcode device console.")]
-    [SerializeField] private bool debugLogHud = true;
-    [Tooltip("One-line diagnostics: confirms distance/name were applied to TMP (mobile logcat).")]
-    [SerializeField] private bool debugLogStatusFillCheck = true;
+    [Tooltip("Verbose TMP logs (normally off; use GeofenceExperienceCoordinator \"FAW\" logs on device).")]
+    [SerializeField] private bool debugLogHud = false;
 
     public GameObject LoadingWidgetRoot => loadingWidgetRoot;
 
@@ -42,6 +43,13 @@ public class GeofenceHudView : MonoBehaviour
             ? "?"
             : experienceName.Replace("<", string.Empty).Replace(">", string.Empty);
         var hex = "#" + ColorUtility.ToHtmlStringRGBA(nameHighlight);
+        if (distanceKm <= ArrivalDistanceKm)
+        {
+            return
+                "You've arrived!\n" +
+                $"<size=115%><color={hex}><b>{safeName}</b></color></size>";
+        }
+
         return
             $"You're {distanceKm:F2} km from the nearest experience:\n" +
             $"<size=115%><color={hex}><b>{safeName}</b></color></size>";
@@ -63,21 +71,8 @@ public class GeofenceHudView : MonoBehaviour
         var formatted = FormatNearestExperienceStatus(distanceKm, experienceName, nameHighlight);
         statusLine.text = formatted;
 
-        if (debugLogStatusFillCheck)
-        {
-            var canvas = statusLine.GetComponentInParent<Canvas>();
-            Debug.Log(
-                "[Geofence HUD fill-check] " +
-                $"distKm={distanceKm:F5} name='{experienceName}' nameLen={experienceName?.Length ?? 0} " +
-                $"assignedTmpLen={formatted.Length} richTextOn={statusLine.richText} " +
-                $"tmpActive={statusLine.gameObject.activeSelf} tmpActiveInHierarchy={statusLine.gameObject.activeInHierarchy} " +
-                $"canvas={(canvas != null ? canvas.name : "null")} canvasEnabled={(canvas != null && canvas.enabled)} " +
-                $"sortOrder={(canvas != null ? canvas.sortingOrder.ToString() : "-")}");
-        }
-
         if (debugLogHud)
-            Debug.Log("[Geofence HUD] SetNearestExperienceStatus (plain preview): " +
-                      $"{distanceKm:F2} km → {experienceName}");
+            Debug.Log($"[FAW] HUD status distKm={distanceKm:F3} name='{experienceName}'");
     }
 
     public void SetStatus(string text)
@@ -98,8 +93,8 @@ public class GeofenceHudView : MonoBehaviour
 
     public void SetUserMessage(string userFacing, string debugDetail)
     {
-        if (!string.IsNullOrEmpty(debugDetail))
-            Debug.Log("[Geofence] " + debugDetail);
+        if (debugLogHud && !string.IsNullOrEmpty(debugDetail))
+            Debug.Log("[FAW] HUD msg-detail: " + debugDetail);
 
         if (messageLine == null)
         {

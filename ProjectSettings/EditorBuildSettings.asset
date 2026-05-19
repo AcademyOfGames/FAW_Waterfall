@@ -26,6 +26,9 @@ EditorBuildSettings:
   - enabled: 0
     path: Assets/Scenes/AlinaScene.unity
     guid: 216691aab5e9fe94bac39eec0f070009
+  - enabled: 0
+    path: Assets/Scenes/devScene.unity
+    guid: 70531daf232db3d4481bc777566fce82
   m_configObjects:
     UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: d03d372fc92c8444584da0a60b01e7b3,
       type: 2}

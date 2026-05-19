@@ -7,22 +7,20 @@ using UnityEngine.Android;
 #endif
 
 /// <summary>
-/// Attach to any active GameObject in AR Geospatial scenes. Logs AR session lifecycle, Earth
-/// localization state, and camera subsystem status at a fixed interval (and on session changes)
-/// to help diagnose black camera / stuck "waiting for AR session" issues on device.
+/// Attach in AR Geospatial scenes. Logs Earth tracking and AR session state on an interval (filter logcat with "FAW").
 /// </summary>
 [DefaultExecutionOrder(-100)]
 public class ARSessionCameraDebugLog : MonoBehaviour
 {
     [SerializeField]
-    private float logIntervalSeconds = 2f;
+    private float logIntervalSeconds = 5f;
 
     [SerializeField]
     private bool logOnSessionStateChanged = true;
 
     [SerializeField]
-    [Tooltip("Logs UnityEngine.Android.Permission.Camera on Android builds (see logcat on device).")]
-    private bool logCameraPermissionExplicitly = true;
+    [Tooltip("Android only: log Permission.Camera on Awake / resume (enable if camera stays black).")]
+    private bool logCameraPermissionExplicitly = false;
 
     private ARCoreExtensions _arCoreExtensions;
     private AREarthManager _earthManager;
@@ -45,30 +43,18 @@ public class ARSessionCameraDebugLog : MonoBehaviour
         _session = FindObjectOfType<ARSession>();
 
         if (_arCoreExtensions == null)
-        {
-            Debug.LogWarning("[ARSessionCameraDebugLog] No ARCoreExtensions in scene.");
-        }
+            Debug.LogWarning("[FAW] AR Geospatial: No ARCoreExtensions in scene.");
 
         if (_session == null)
-        {
-            Debug.LogWarning("[ARSessionCameraDebugLog] No ARSession in scene.");
-        }
+            Debug.LogWarning("[FAW] AR Geospatial: No ARSession in scene.");
 
         if (_cameraManager == null)
-        {
-            Debug.LogWarning("[ARSessionCameraDebugLog] No ARCameraManager in scene (camera feed will not work).");
-        }
+            Debug.LogWarning("[FAW] AR Geospatial: No ARCameraManager (no passthrough).");
         else if (_cameraBackground == null)
-        {
-            Debug.LogWarning(
-                "[ARSessionCameraDebugLog] ARCameraManager present but no ARCameraBackground on the " +
-                "AR camera — the passthrough feed usually requires ARCameraBackground.");
-        }
+            Debug.LogWarning("[FAW] AR Geospatial: ARCameraBackground missing on AR camera (passthrough usually needs it).");
 
         if (_earthManager == null)
-        {
-            Debug.LogWarning("[ARSessionCameraDebugLog] No AREarthManager in scene (Geospatial Earth API unavailable).");
-        }
+            Debug.LogWarning("[FAW] AR Geospatial: No AREarthManager (Earth / Geospatial API unavailable).");
 
         if (logCameraPermissionExplicitly)
         {
@@ -98,32 +84,22 @@ public class ARSessionCameraDebugLog : MonoBehaviour
     {
 #if UNITY_ANDROID
         if (Application.isEditor)
-        {
-            Debug.Log(
-                "[ARSessionCameraDebugLog] (" + context + ") Camera permission: check an installed " +
-                "APK with adb logcat — UnityEngine.Android.Permission is not meaningful in the Editor.");
             return;
-        }
 
         bool granted = Permission.HasUserAuthorizedPermission(Permission.Camera);
         Debug.Log(
-            "[ARSessionCameraDebugLog] (" + context + ") Android Permission.Camera = " +
-            (granted ? "GRANTED" : "NOT GRANTED") +
-            " (if NOT GRANTED, AR camera feed will stay black until the user allows camera access).");
+            "[FAW] AR Geospatial: Android Permission.Camera (" + context + ") = " +
+            (granted ? "GRANTED" : "NOT_GRANTED"));
 
         if (_lastLoggedCameraPermission.HasValue && _lastLoggedCameraPermission.Value != granted)
         {
             Debug.LogWarning(
-                "[ARSessionCameraDebugLog] Camera permission changed: " +
-                (_lastLoggedCameraPermission.Value ? "GRANTED" : "NOT GRANTED") + " -> " +
-                (granted ? "GRANTED" : "NOT GRANTED"));
+                "[FAW] AR Geospatial: Camera permission changed " +
+                (_lastLoggedCameraPermission.Value ? "GRANTED" : "NOT_GRANTED") + " -> " +
+                (granted ? "GRANTED" : "NOT_GRANTED"));
         }
 
         _lastLoggedCameraPermission = granted;
-#else
-        Debug.Log(
-            "[ARSessionCameraDebugLog] (" + context + ") Camera permission: Android-only check " +
-            "(UnityEngine.Android.Permission.Camera); this build target does not use that API.");
 #endif
     }
 
@@ -143,8 +119,7 @@ public class ARSessionCameraDebugLog : MonoBehaviour
     private void OnARSessionStateChanged(ARSessionStateChangedEventArgs args)
     {
         Debug.Log(
-            $"[ARSessionCameraDebugLog] ARSession.state changed: {args.state}, " +
-            $"notTrackingReason={ARSession.notTrackingReason}");
+            $"[FAW] AR Geospatial: ARSession.state={args.state} notTrackingReason={ARSession.notTrackingReason}");
     }
 
     private void Update()
@@ -165,7 +140,6 @@ public class ARSessionCameraDebugLog : MonoBehaviour
 
     private void LogPeriodicSnapshot()
     {
-        bool extensionsOk = _arCoreExtensions != null && _arCoreExtensions.Session != null;
         bool sessionSubsystemRunning =
             _session != null && _session.subsystem != null && _session.subsystem.running;
 
@@ -197,11 +171,8 @@ public class ARSessionCameraDebugLog : MonoBehaviour
 #endif
 
         Debug.Log(
-            $"[ARSessionCameraDebugLog] ARSession.state={ARSession.state}, notTrackingReason={ARSession.notTrackingReason}, " +
-            $"ARCoreExtensions.sessionAssigned={extensionsOk}, XRSessionSubsystem.running={sessionSubsystemRunning}, " +
-            $"{earthLine}, {cameraSubsystem}, " +
-            $"ARCameraBackground={(_cameraBackground != null && _cameraBackground.enabled)}, " +
-            $"ARSession.enabled={(_session != null && _session.enabled)}" +
+            $"[FAW] AR Geospatial: Earth={earthLine} | ARSession.state={ARSession.state} notTracking={ARSession.notTrackingReason} " +
+            $"xrRunning={sessionSubsystemRunning} cam={cameraSubsystem} camBg={(_cameraBackground != null && _cameraBackground.enabled)}" +
             perm);
     }
 }

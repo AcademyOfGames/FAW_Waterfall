@@ -7,9 +7,11 @@ using UnityEngine.UI;
 /// </summary>
 public static class GeofenceRuntimeUiBuilder
 {
+    public const string RuntimeHudCanvasObjectName = "GeofenceHudCanvas";
+
     public static GeofenceHudView Build(Transform parent)
     {
-        var canvasGo = new GameObject("GeofenceHudCanvas");
+        var canvasGo = new GameObject(RuntimeHudCanvasObjectName);
         canvasGo.transform.SetParent(parent, false);
         var canvas = canvasGo.AddComponent<Canvas>();
         canvas.renderMode = RenderMode.ScreenSpaceOverlay;
@@ -79,7 +81,7 @@ public static class GeofenceRuntimeUiBuilder
 
         var hud = canvasGo.AddComponent<GeofenceHudView>();
         hud.Initialize(statusTmp, messageTmp, loading);
-        Debug.Log("[Geofence] Runtime HUD canvas built under parent '" + parent.name + "' (TMP status/message + loading widget).");
+        Debug.Log("[FAW] Geofence: runtime HUD canvas built (TMP + loading widget).");
         return hud;
     }
 
