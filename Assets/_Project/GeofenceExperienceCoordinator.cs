@@ -28,7 +28,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     [Tooltip("UnityEngine.Debug.Log — filter logcat with \"FAW\" for distance, Addressables, START, scene transitions.")]
     [SerializeField] private bool debugLogGeofence = true;
     [Tooltip("While GPS is valid, log nearest experience / distance at most this often (state changes still log immediately).")]
-    [SerializeField] private float experienceFindLogSeconds = 5f;
+    [SerializeField] private float experienceFindLogSeconds = 10f;
     [Tooltip("While in geofence but Addressables not ready, log why START is blocked on this interval.")]
     [SerializeField] private float startBlockedLogSeconds = 5f;
     [Tooltip("TMP rich-text color for the nearest experience name (bold is applied in code).")]
@@ -292,7 +292,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
             IsNearestWithinEnterRadius = false;
             if (debugLogGeofence && Time.unscaledTime >= _nextLocationWaitLog)
             {
-                _nextLocationWaitLog = Time.unscaledTime + 5f;
+                _nextLocationWaitLog = Time.unscaledTime + experienceFindLogSeconds;
                 GeoDebug(
                     UseSimulatedLocation
                         ? "Waiting (unexpected): editor sim should be running."

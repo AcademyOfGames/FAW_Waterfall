@@ -1313,7 +1313,7 @@ MonoBehaviour:
   dontDestroyOnLoad: 1
   buildRuntimeUiIfMissing: 0
   debugLogGeofence: 1
-  experienceFindLogSeconds: 5
+  experienceFindLogSeconds: 10
   startBlockedLogSeconds: 5
   nearestExperienceNameColor: {r: 0.2784314, g: 0.050980397, b: 0.8196079, a: 1}
   simulateLocationInEditor: 1
@@ -1352,6 +1352,7 @@ MonoBehaviour:
   messageLine: {fileID: 1422795880}
   loadingWidgetRoot: {fileID: 1492712950}
   debugLogHud: 1
+  nearestStatusLogSeconds: 10
 --- !u!114 &999900006
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -2370,11 +2371,6 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Name
       value: DebugCanvas
-      objectReference: {fileID: 0}
-    - target: {fileID: 6057514000936288846, guid: 28b4961932840c442bdb3a84117c9728,
-        type: 3}
-      propertyPath: m_IsActive
-      value: 1
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

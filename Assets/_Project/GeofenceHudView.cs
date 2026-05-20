@@ -15,6 +15,10 @@ public class GeofenceHudView : MonoBehaviour
     [SerializeField] private GameObject loadingWidgetRoot;
     [Tooltip("Verbose TMP logs (normally off; use GeofenceExperienceCoordinator \"FAW\" logs on device).")]
     [SerializeField] private bool debugLogHud = false;
+    [Tooltip("When debugLogHud is on, log nearest distance/name at most this often (UI still updates every poll).")]
+    [SerializeField] private float nearestStatusLogSeconds = 10f;
+
+    private float _nextNearestStatusLog;
 
     public GameObject LoadingWidgetRoot => loadingWidgetRoot;
 
@@ -71,8 +75,11 @@ public class GeofenceHudView : MonoBehaviour
         var formatted = FormatNearestExperienceStatus(distanceKm, experienceName, nameHighlight);
         statusLine.text = formatted;
 
-        if (debugLogHud)
+        if (debugLogHud && Time.unscaledTime >= _nextNearestStatusLog)
+        {
+            _nextNearestStatusLog = Time.unscaledTime + nearestStatusLogSeconds;
             Debug.Log($"[FAW] HUD status distKm={distanceKm:F3} name='{experienceName}'");
+        }
     }
 
     public void SetStatus(string text)
