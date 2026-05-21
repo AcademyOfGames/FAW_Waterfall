@@ -56,6 +56,21 @@ public struct ExperienceGeofenceDefinition
 
     public const double EnterGeofenceKm = 0.1609344;
 
+    public static bool TryGetByExperienceName(string experienceName, out ExperienceGeofenceDefinition definition)
+    {
+        foreach (var def in All)
+        {
+            if (string.Equals(def.ExperienceName, experienceName, StringComparison.OrdinalIgnoreCase))
+            {
+                definition = def;
+                return true;
+            }
+        }
+
+        definition = default;
+        return false;
+    }
+
     public static double HaversineKm(double lat1, double lon1, double lat2, double lon2)
     {
         const double earthRadiusKm = 6371.0;

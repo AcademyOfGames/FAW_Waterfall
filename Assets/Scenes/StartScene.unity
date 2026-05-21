@@ -1306,7 +1306,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   addressables: {fileID: 999900004}
   hud: {fileID: 999900005}
-  developerSceneUnlock: {fileID: 0}
+  developerSceneUnlock: {fileID: 481071536}
   menuCanvasToHideAfterLoad: {fileID: 1978616384}
   loadingWidget: {fileID: 1492712950}
   pollSeconds: 0.75
@@ -1316,6 +1316,8 @@ MonoBehaviour:
   experienceFindLogSeconds: 10
   startBlockedLogSeconds: 5
   nearestExperienceNameColor: {r: 0.2784314, g: 0.050980397, b: 0.8196079, a: 1}
+  forceAtAlinaGeofence: 1
+  buildRuntimeAlinaForceToggle: 1
   simulateLocationInEditor: 1
   simulatedLatitude: 47.9
   simulatedLongitude: -122.339

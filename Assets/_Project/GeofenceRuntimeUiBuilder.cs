@@ -9,7 +9,8 @@ public static class GeofenceRuntimeUiBuilder
 {
     public const string RuntimeHudCanvasObjectName = "GeofenceHudCanvas";
 
-    public static GeofenceHudView Build(Transform parent)
+    public static GeofenceHudView Build(Transform parent, GeofenceExperienceCoordinator coordinator = null,
+        bool addAlinaForceToggle = false)
     {
         var canvasGo = new GameObject(RuntimeHudCanvasObjectName);
         canvasGo.transform.SetParent(parent, false);
@@ -81,8 +82,58 @@ public static class GeofenceRuntimeUiBuilder
 
         var hud = canvasGo.AddComponent<GeofenceHudView>();
         hud.Initialize(statusTmp, messageTmp, loading);
+
+        if (addAlinaForceToggle && coordinator != null)
+            BuildAlinaForceToggle(canvasGo.transform, coordinator);
+
         Debug.Log("[FAW] Geofence: runtime HUD canvas built (TMP + loading widget).");
         return hud;
+    }
+
+    private static void BuildAlinaForceToggle(Transform parent, GeofenceExperienceCoordinator coordinator)
+    {
+        var row = new GameObject("AlinaForceToggleRow", typeof(RectTransform));
+        row.transform.SetParent(parent, false);
+        var rowRt = row.GetComponent<RectTransform>();
+        rowRt.anchorMin = new Vector2(0f, 0f);
+        rowRt.anchorMax = new Vector2(0f, 0f);
+        rowRt.pivot = new Vector2(0f, 0f);
+        rowRt.anchoredPosition = new Vector2(24f, 24f);
+        rowRt.sizeDelta = new Vector2(420f, 40f);
+
+        var toggleGo = new GameObject("Toggle", typeof(RectTransform));
+        toggleGo.transform.SetParent(row.transform, false);
+        var toggleRt = toggleGo.GetComponent<RectTransform>();
+        toggleRt.anchorMin = new Vector2(0f, 0.5f);
+        toggleRt.anchorMax = new Vector2(0f, 0.5f);
+        toggleRt.pivot = new Vector2(0f, 0.5f);
+        toggleRt.anchoredPosition = Vector2.zero;
+        toggleRt.sizeDelta = new Vector2(36f, 36f);
+
+        var bg = toggleGo.AddComponent<Image>();
+        bg.color = new Color(0.15f, 0.15f, 0.15f, 0.85f);
+
+        var check = new GameObject("Checkmark", typeof(RectTransform));
+        check.transform.SetParent(toggleGo.transform, false);
+        var checkRt = check.GetComponent<RectTransform>();
+        checkRt.anchorMin = Vector2.zero;
+        checkRt.anchorMax = Vector2.one;
+        checkRt.offsetMin = new Vector2(6f, 6f);
+        checkRt.offsetMax = new Vector2(-6f, -6f);
+        var checkImg = check.AddComponent<Image>();
+        checkImg.color = new Color32(0x2E, 0x8B, 0xFF, 0xFF);
+
+        var toggle = toggleGo.AddComponent<Toggle>();
+        toggle.targetGraphic = bg;
+        toggle.graphic = checkImg;
+        toggle.isOn = coordinator.ForceAtAlinaGeofence;
+        toggle.onValueChanged.AddListener(v => coordinator.ForceAtAlinaGeofence = v);
+
+        var fontAsset = TMP_Settings.defaultFontAsset;
+        var label = CreateTmpText(row.transform, "Label", fontAsset, 18f, TextAlignmentOptions.MidlineLeft,
+            new Vector2(0f, 0.5f), new Vector2(1f, 0.5f), new Vector2(48f, 0f), new Vector2(-8f, 36f));
+        label.text = "Simulate at Alina (download + START)";
+        label.raycastTarget = false;
     }
 
     private static TextMeshProUGUI CreateTmpText(Transform parent, string name, TMP_FontAsset fontAsset, float fontSize,

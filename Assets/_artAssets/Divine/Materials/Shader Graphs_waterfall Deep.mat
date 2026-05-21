@@ -72,14 +72,14 @@ Material:
         m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
-    - _DistortionIntensity: 0.06
-    - _DistortionSize: 15.37
+    - _DistortionIntensity: 0.07
+    - _DistortionSize: 11.7
     - _QueueControl: 0
     - _QueueOffset: 0
     - _Smoothness: 0
-    - _Thickness: -0.33
-    - _Transparency: 10.89
-    - _specIntensity: 0
+    - _Thickness: -0.83
+    - _Transparency: 4.46
+    - _specIntensity: -1.07
     m_Colors:
     - _Color: {r: 1, g: 1, b: 1, a: 1}
   m_BuildTextureStacks: []

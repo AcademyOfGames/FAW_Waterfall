@@ -8,22 +8,22 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/StartScene.unity
     guid: 0463fa934a2cf4944a7bca8357863fdb
-  - enabled: 0
+  - enabled: 1
     path: Assets/Scenes/SampleScene.unity
     guid: 99c9720ab356a0642a771bea13969a05
-  - enabled: 0
+  - enabled: 1
     path: Assets/Scenes/ChenoaScene.unity
     guid: 757ffdeed9915be479120827bb9783d6
-  - enabled: 0
+  - enabled: 1
     path: Assets/Scenes/DanScene.unity
     guid: a406e282be8741c44b200078ae80984b
-  - enabled: 0
+  - enabled: 1
     path: Assets/Scenes/benaroyaScene.unity
     guid: 9f387381f11ef90499c08009d7412cb5
   - enabled: 0
     path: Assets/Scenes/SampleSceneHousePos.unity
     guid: 9d3a8b2eb8e7a004cb512f3b998a2612
-  - enabled: 0
+  - enabled: 1
     path: Assets/Scenes/AlinaScene.unity
     guid: 216691aab5e9fe94bac39eec0f070009
   - enabled: 0

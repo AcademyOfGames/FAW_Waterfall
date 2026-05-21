@@ -34,6 +34,12 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     [Tooltip("TMP rich-text color for the nearest experience name (bold is applied in code).")]
     [SerializeField] private Color nearestExperienceNameColor = new Color32(0x2E, 0x8B, 0xFF, 0xFF);
 
+    [Header("Debug / testing")]
+    [Tooltip("Pretend GPS is at Alina's lat/lon so prefetch and START behave as if you are inside her geofence. Works in Editor and on device.")]
+    [SerializeField] private bool forceAtAlinaGeofence;
+    [Tooltip("When runtime HUD is built, add an on-screen toggle for Force At Alina Geofence.")]
+    [SerializeField] private bool buildRuntimeAlinaForceToggle = true;
+
     [Header("Editor-only location simulator")]
     [Tooltip("When enabled, Play Mode in the Unity Editor uses simulated lat/lon instead of Input.location. Ignored in all player builds (Application.isEditor is false).")]
     [SerializeField] private bool simulateLocationInEditor = true;
@@ -70,6 +76,20 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     /// <summary>Shared Addressables instance used by geofence prefetch, START, and developer unlock.</summary>
     public AddressableLoadingManager SharedAddressables => addressables;
 
+    /// <summary>When true, geofence polling uses Alina's coordinates instead of device GPS.</summary>
+    public bool ForceAtAlinaGeofence
+    {
+        get => forceAtAlinaGeofence;
+        set
+        {
+            if (forceAtAlinaGeofence == value)
+                return;
+            forceAtAlinaGeofence = value;
+            _lastPrefetchLabel = null;
+            GeoDebug(value ? "Force at Alina geofence: ON" : "Force at Alina geofence: OFF");
+        }
+    }
+
     /// <summary>Wires the hidden dev unlock button to this coordinator's Addressables manager.</summary>
     public void BindDeveloperSceneUnlock(AddressableLabeledSceneButton unlock)
     {
@@ -99,7 +119,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
         addressables.OnSceneLoadSucceeded += OnExperienceSceneLoaded;
 
         if (hud == null && buildRuntimeUiIfMissing)
-            hud = GeofenceRuntimeUiBuilder.Build(transform);
+            hud = GeofenceRuntimeUiBuilder.Build(transform, this, buildRuntimeAlinaForceToggle);
 
         if (developerSceneUnlock == null)
             developerSceneUnlock = FindFirstObjectByType<AddressableLabeledSceneButton>();
@@ -113,7 +133,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
 
         GeoDebug(
             $"init scene={SceneManager.GetActiveScene().name} enterRadiusKm={ExperienceGeofenceDefinition.EnterGeofenceKm:F4} " +
-            $"editorLocSim={(UseSimulatedLocation ? "on" : "off")}");
+            $"editorLocSim={(UseSimulatedLocation ? "on" : "off")} forceAlina={(forceAtAlinaGeofence ? "on" : "off")}");
     }
 
     private void OnDestroy()
@@ -366,7 +386,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
         {
             _nextExperienceFindLog = Time.unscaledTime + experienceFindLogSeconds;
             GeoDebug(
-                $"nearest experience lat={lat:F5} lon={lon:F5} hAcc={hAccM:F0}m sim={UseSimulatedLocation} " +
+                $"nearest experience lat={lat:F5} lon={lon:F5} hAcc={hAccM:F0}m sim={UseSimulatedLocation} forceAlina={forceAtAlinaGeofence} " +
                 $"name='{nearest.ExperienceName}' distKm={distanceKm:F3} inRange={inRange} addrReady={ready} " +
                 $"scene='{activeScene}' label='{nearest.AddressableLabel}'");
         }
@@ -520,13 +540,21 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
 
     private bool IsLocationServiceRunning()
     {
-        if (UseSimulatedLocation)
+        if (forceAtAlinaGeofence || UseSimulatedLocation)
             return true;
         return Input.location.status == LocationServiceStatus.Running;
     }
 
     private bool TryGetLastLocation(out double latitude, out double longitude, out float horizontalAccuracyMeters)
     {
+        if (forceAtAlinaGeofence && ExperienceGeofenceDefinition.TryGetByExperienceName("Alina", out var alina))
+        {
+            latitude = alina.Latitude;
+            longitude = alina.Longitude;
+            horizontalAccuracyMeters = 5f;
+            return true;
+        }
+
         if (UseSimulatedLocation)
         {
             latitude = simulatedLatitude;
