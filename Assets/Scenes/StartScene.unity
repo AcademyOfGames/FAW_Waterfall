@@ -533,11 +533,11 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 34dcf4fc7c69a2843a565c1c1c51a25d, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  addressableLabel: dev
+  devSceneName: devScene
   tapsRequired: 5
   tapSequenceTimeoutSeconds: 3
-  unlockMessage: Developer scene unlocked. Press START when done loading addressable.
-  addressables: {fileID: 999900004}
+  unlockMessage: Developer scene unlocked. Press START to open the developer scene.
+  sceneLoader: {fileID: 999900004}
   hud: {fileID: 999900005}
   fallbackMessageText: {fileID: 1422795880}
 --- !u!114 &481071537
@@ -585,7 +585,7 @@ MonoBehaviour:
     m_PersistentCalls:
       m_Calls:
       - m_Target: {fileID: 481071536}
-        m_TargetAssemblyTypeName: AddressableLabeledSceneButton, Assembly-CSharp
+        m_TargetAssemblyTypeName: DeveloperSceneUnlockButton, Assembly-CSharp
         m_MethodName: RegisterUnlockTap
         m_Mode: 1
         m_Arguments:
@@ -1304,7 +1304,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 8a3f2e1d4c5b6a79808192a3b4c5d6e7, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  addressables: {fileID: 999900004}
+  sceneLoader: {fileID: 999900004}
   hud: {fileID: 999900005}
   developerSceneUnlock: {fileID: 481071536}
   menuCanvasToHideAfterLoad: {fileID: 1978616384}
@@ -1316,9 +1316,13 @@ MonoBehaviour:
   experienceFindLogSeconds: 10
   startBlockedLogSeconds: 5
   nearestExperienceNameColor: {r: 0.2784314, g: 0.050980397, b: 0.8196079, a: 1}
-  forceAtAlinaGeofence: 1
-  buildRuntimeAlinaForceToggle: 1
-  simulateLocationInEditor: 1
+  forceBenaroyaGeofence: 0
+  forceAlinaGeofence: 0
+  forceSampleSceneGeofence: 0
+  forceChenoaGeofence: 0
+  forceDanGeofence: 0
+  buildRuntimeForceGeofenceToggles: 0
+  simulateLocationInEditor: 0
   simulatedLatitude: 47.9
   simulatedLongitude: -122.339
   simulatedHorizontalAccuracyMeters: 5
@@ -1334,10 +1338,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ae9aae7d912d0b442bc40a88f9c29d71, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  addressableLabel: 
-  postDownloadDelaySeconds: 2
-  debugLogAddressables: 1
-  downloadProgressLogSeconds: 5
+  legacySceneLabel: 
+  postLoadDelaySeconds: 0
+  debugLogScenes: 1
 --- !u!114 &999900005
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1367,9 +1370,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: a1b2c3d4e5f6789012345678abcdef01, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  addressables: {fileID: 999900004}
+  sceneLoader: {fileID: 999900004}
   geofenceCoordinator: {fileID: 999900003}
-  developerSceneUnlock: {fileID: 0}
+  developerSceneUnlock: {fileID: 481071536}
   loadingSequence: {fileID: 1492712952}
   label: {fileID: 0}
   readyText: START
@@ -1989,6 +1992,37 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1725920550}
   m_CullTransparentMesh: 1
+--- !u!1 &1743454207
+GameObject:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  serializedVersion: 6
+  m_Component:
+  - component: {fileID: 1743454208}
+  m_Layer: 0
+  m_Name: GameObject
+  m_TagString: Untagged
+  m_Icon: {fileID: 0}
+  m_NavMeshLayer: 0
+  m_StaticEditorFlags: 0
+  m_IsActive: 1
+--- !u!4 &1743454208
+Transform:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1743454207}
+  serializedVersion: 2
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
+  m_LocalPosition: {x: 10.050617, y: 2.3377724, z: 399.9139}
+  m_LocalScale: {x: 1, y: 1, z: 1}
+  m_ConstrainProportionsScale: 0
+  m_Children: []
+  m_Father: {fileID: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1810579577
 GameObject:
   m_ObjectHideFlags: 0
@@ -2388,3 +2422,4 @@ SceneRoots:
   - {fileID: 625711717}
   - {fileID: 999900002}
   - {fileID: 2022089566}
+  - {fileID: 1743454208}
