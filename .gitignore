@@ -80,3 +80,7 @@ FutureArtsWay_BurstDebugInformation_DoNotShip/tempburstlibs/arm64-v8a/lib_burst_
 /CCDBuildData
 /CCDBuildData
 /FinalBuild
+.DS_Store
+.vscode/extensions.json
+.vscode/launch.json
+.vscode/settings.json
