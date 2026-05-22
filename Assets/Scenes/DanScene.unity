@@ -133,17 +133,17 @@ PrefabInstance:
     - target: {fileID: 2620481142598289264, guid: 4316137055aff4c47ac1ddc2c451bb96,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: -9.024187
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2620481142598289264, guid: 4316137055aff4c47ac1ddc2c451bb96,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.3474192
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 2620481142598289264, guid: 4316137055aff4c47ac1ddc2c451bb96,
         type: 3}
       propertyPath: m_LocalPosition.z
-      value: -400.25732
+      value: 17.6
       objectReference: {fileID: 0}
     - target: {fileID: 6953898639685459251, guid: 4316137055aff4c47ac1ddc2c451bb96,
         type: 3}
@@ -564,10 +564,9 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: ae9aae7d912d0b442bc40a88f9c29d71, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  addressableLabel: 
-  postDownloadDelaySeconds: 2
-  debugLogAddressables: 1
-  downloadProgressLogSeconds: 5
+  legacySceneLabel: 
+  postLoadDelaySeconds: 2
+  debugLogScenes: 1
 --- !u!1 &1388839052
 GameObject:
   m_ObjectHideFlags: 0

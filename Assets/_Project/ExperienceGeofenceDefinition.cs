@@ -6,7 +6,6 @@ public struct ExperienceGeofenceDefinition
 {
     public string ExperienceName;
     public string SceneName;
-    public string AddressableLabel;
     public double Latitude;
     public double Longitude;
 
@@ -16,7 +15,6 @@ public struct ExperienceGeofenceDefinition
         {
             ExperienceName = "Benaroya",
             SceneName = "benaroyaScene",
-            AddressableLabel = "benaroya",
             Latitude = 47.608,
             Longitude = -122.3362
         },
@@ -24,7 +22,6 @@ public struct ExperienceGeofenceDefinition
         {
             ExperienceName = "Alina",
             SceneName = "AlinaScene",
-            AddressableLabel = "alina",
             Latitude = 47.61974,
             Longitude = -122.3516
         },
@@ -32,7 +29,6 @@ public struct ExperienceGeofenceDefinition
         {
             ExperienceName = "Divine",
             SceneName = "SampleScene",
-            AddressableLabel = "divine",
             Latitude = 47.6111,
             Longitude = -122.339
         },
@@ -40,7 +36,6 @@ public struct ExperienceGeofenceDefinition
         {
             ExperienceName = "Chenoa",
             SceneName = "ChenoaScene",
-            AddressableLabel = "chenoa",
             Latitude = 47.599,
             Longitude = -122.3301
         },
@@ -48,13 +43,50 @@ public struct ExperienceGeofenceDefinition
         {
             ExperienceName = "Dan",
             SceneName = "DanScene",
-            AddressableLabel = "dan",
             Latitude = 47.6028,
             Longitude = -122.3312
         }
     };
 
     public const double EnterGeofenceKm = 0.1609344;
+
+    /// <summary>Maps former Addressable labels to build-settings scene names.</summary>
+    public static bool TryGetSceneNameForLegacyLabel(string label, out string sceneName)
+    {
+        if (string.IsNullOrEmpty(label))
+        {
+            sceneName = null;
+            return false;
+        }
+
+        foreach (var def in All)
+        {
+            if (string.Equals(def.SceneName, label, StringComparison.Ordinal))
+            {
+                sceneName = def.SceneName;
+                return true;
+            }
+
+            if (string.Equals(def.ExperienceName, label, StringComparison.OrdinalIgnoreCase))
+            {
+                sceneName = def.SceneName;
+                return true;
+            }
+        }
+
+        switch (label.ToLowerInvariant())
+        {
+            case "benaroya": sceneName = "benaroyaScene"; return true;
+            case "alina": sceneName = "AlinaScene"; return true;
+            case "divine": sceneName = "SampleScene"; return true;
+            case "chenoa": sceneName = "ChenoaScene"; return true;
+            case "dan": sceneName = "DanScene"; return true;
+            case "dev": sceneName = "devScene"; return true;
+            default:
+                sceneName = null;
+                return false;
+        }
+    }
 
     public static bool TryGetByExperienceName(string experienceName, out ExperienceGeofenceDefinition definition)
     {

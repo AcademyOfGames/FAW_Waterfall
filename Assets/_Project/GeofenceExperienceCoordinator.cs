@@ -1,44 +1,49 @@
 using System.Collections;
 using UnityEngine;
 using UnityEngine.SceneManagement;
+using UnityEngine.Serialization;
 #if UNITY_ANDROID
 using UnityEngine.Android;
 #endif
 
 /// <summary>
-/// Keeps nearest experience prefetching via Addressables. On the menu / non-experience scene, when the user is
-/// inside the enter radius and dependencies are ready, UI calls <see cref="LoadNearestExperienceFromUi"/> (START).
-/// When already inside a known experience scene (from that flow), entering another experience's radius with
-/// dependencies ready loads that scene automatically—no return to the menu.
-/// Expects an <see cref="AddressableLoadingManager"/> on the same GameObject (or assign explicitly).
+/// Tracks the nearest experience geofence, prepares its scene for loading, and opens it from START
+/// or automatically when switching between experience scenes in range.
+/// Expects an <see cref="ExperienceSceneLoadingManager"/> on the same GameObject (or assign explicitly).
 /// </summary>
 [DisallowMultipleComponent]
 public class GeofenceExperienceCoordinator : MonoBehaviour
 {
-    [SerializeField] private AddressableLoadingManager addressables;
+    [FormerlySerializedAs("addressables")]
+    [SerializeField] private ExperienceSceneLoadingManager sceneLoader;
     [SerializeField] private GeofenceHudView hud;
-    [SerializeField] private AddressableLabeledSceneButton developerSceneUnlock;
+    [SerializeField] private DeveloperSceneUnlockButton developerSceneUnlock;
     [Tooltip("Optional: drag the main menu Canvas (e.g. child of this object) to hide after an experience scene loads. Auto-find skips the runtime GeofenceHudCanvas.")]
     [SerializeField] private Canvas menuCanvasToHideAfterLoad;
-    [Tooltip("Shown while in geofence and nearest bundle is not ready. Often the same object as Geofence Hud View → Loading Widget Root.")]
+    [Tooltip("Shown while in geofence and nearest scene is not ready. Often the same object as Geofence Hud View → Loading Widget Root.")]
     [SerializeField] private GameObject loadingWidget;
     [SerializeField] private float pollSeconds = 0.75f;
     [SerializeField] private bool dontDestroyOnLoad = true;
     [SerializeField] private bool buildRuntimeUiIfMissing = true;
-    [Tooltip("UnityEngine.Debug.Log — filter logcat with \"FAW\" for distance, Addressables, START, scene transitions.")]
+    [Tooltip("UnityEngine.Debug.Log — filter logcat with \"FAW\" for distance, scenes, START, scene transitions.")]
     [SerializeField] private bool debugLogGeofence = true;
     [Tooltip("While GPS is valid, log nearest experience / distance at most this often (state changes still log immediately).")]
     [SerializeField] private float experienceFindLogSeconds = 10f;
-    [Tooltip("While in geofence but Addressables not ready, log why START is blocked on this interval.")]
+    [Tooltip("While in geofence but scene is not ready, log why START is blocked on this interval.")]
     [SerializeField] private float startBlockedLogSeconds = 5f;
     [Tooltip("TMP rich-text color for the nearest experience name (bold is applied in code).")]
     [SerializeField] private Color nearestExperienceNameColor = new Color32(0x2E, 0x8B, 0xFF, 0xFF);
 
-    [Header("Debug / testing")]
-    [Tooltip("Pretend GPS is at Alina's lat/lon so prefetch and START behave as if you are inside her geofence. Works in Editor and on device.")]
-    [SerializeField] private bool forceAtAlinaGeofence;
-    [Tooltip("When runtime HUD is built, add an on-screen toggle for Force At Alina Geofence.")]
-    [SerializeField] private bool buildRuntimeAlinaForceToggle = true;
+    [Header("Debug / testing — force geofence")]
+    [Tooltip("Pretend GPS is at this experience's lat/lon. If more than one is checked, the first in list order below wins (Benaroya → Alina → Sample → Chenoa → Dan).")]
+    [SerializeField] private bool forceBenaroyaGeofence;
+    [FormerlySerializedAs("forceAtAlinaGeofence")]
+    [SerializeField] private bool forceAlinaGeofence;
+    [SerializeField] private bool forceSampleSceneGeofence;
+    [SerializeField] private bool forceChenoaGeofence;
+    [SerializeField] private bool forceDanGeofence;
+    [Tooltip("When runtime HUD is built, add on-screen toggles for force-geofence overrides.")]
+    [SerializeField] private bool buildRuntimeForceGeofenceToggles = true;
 
     [Header("Editor-only location simulator")]
     [Tooltip("When enabled, Play Mode in the Unity Editor uses simulated lat/lon instead of Input.location. Ignored in all player builds (Application.isEditor is false).")]
@@ -51,7 +56,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     private float _nextLocationWaitLog;
     private float _nextInvalidGpsLog;
     private Coroutine _locationStart;
-    private string _lastPrefetchLabel;
+    private string _lastPrefetchSceneName;
     private ExperienceGeofenceDefinition _lastNearest;
     private Canvas _hostCanvas;
     private Canvas _menuCanvasCapturedAtStartClick;
@@ -59,44 +64,37 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     private float _nextStartBlockedLog;
     private bool _hadGpsFixForState;
     private bool _prevInRange;
-    private bool _prevAddrReady;
+    private bool _prevSceneReady;
 
-    /// <summary>
-    /// Updated each successful location poll: true when distance to the nearest definition is within <see cref="ExperienceGeofenceDefinition.EnterGeofenceKm"/>.
-    /// </summary>
     public bool IsNearestWithinEnterRadius { get; private set; }
 
-    /// <summary>Last polled nearest experience label (for START UI diagnostics).</summary>
-    public bool TryGetLastNearestLabel(out string label)
+    public bool TryGetLastNearestSceneName(out string sceneName)
     {
-        label = _lastNearest.AddressableLabel;
-        return !string.IsNullOrEmpty(label);
+        sceneName = _lastNearest.SceneName;
+        return !string.IsNullOrEmpty(sceneName);
     }
 
-    /// <summary>Shared Addressables instance used by geofence prefetch, START, and developer unlock.</summary>
-    public AddressableLoadingManager SharedAddressables => addressables;
+    public ExperienceSceneLoadingManager SharedSceneLoader => sceneLoader;
 
-    /// <summary>When true, geofence polling uses Alina's coordinates instead of device GPS.</summary>
-    public bool ForceAtAlinaGeofence
+    public bool GetForceGeofence(string sceneName)
     {
-        get => forceAtAlinaGeofence;
-        set
-        {
-            if (forceAtAlinaGeofence == value)
-                return;
-            forceAtAlinaGeofence = value;
-            _lastPrefetchLabel = null;
-            GeoDebug(value ? "Force at Alina geofence: ON" : "Force at Alina geofence: OFF");
-        }
+        return IsForceGeofenceEnabledForScene(sceneName);
     }
 
-    /// <summary>Wires the hidden dev unlock button to this coordinator's Addressables manager.</summary>
-    public void BindDeveloperSceneUnlock(AddressableLabeledSceneButton unlock)
+    public void SetForceGeofence(string sceneName, bool value)
+    {
+        if (!TrySetForceGeofenceForScene(sceneName, value))
+            return;
+        _lastPrefetchSceneName = null;
+        GeoDebug(value ? $"Force geofence: ON ({sceneName})" : $"Force geofence: OFF ({sceneName})");
+    }
+
+    public void BindDeveloperSceneUnlock(DeveloperSceneUnlockButton unlock)
     {
         if (unlock == null)
             return;
         developerSceneUnlock = unlock;
-        unlock.Bind(this, addressables, hud);
+        unlock.Bind(this, sceneLoader, hud);
     }
 
     private void Awake()
@@ -106,23 +104,23 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
         if (dontDestroyOnLoad)
             DontDestroyOnLoad(gameObject);
 
-        if (addressables == null)
-            addressables = GetComponent<AddressableLoadingManager>();
-        if (addressables == null)
+        if (sceneLoader == null)
+            sceneLoader = GetComponent<ExperienceSceneLoadingManager>();
+        if (sceneLoader == null)
         {
-            Debug.LogError("[FAW] Geofence: AddressableLoadingManager missing — coordinator disabled.");
+            Debug.LogError("[FAW] Geofence: ExperienceSceneLoadingManager missing — coordinator disabled.");
             enabled = false;
             return;
         }
 
-        addressables.OnNotify += OnAddressablesNotify;
-        addressables.OnSceneLoadSucceeded += OnExperienceSceneLoaded;
+        sceneLoader.OnNotify += OnSceneLoaderNotify;
+        sceneLoader.OnSceneLoadSucceeded += OnExperienceSceneLoaded;
 
         if (hud == null && buildRuntimeUiIfMissing)
-            hud = GeofenceRuntimeUiBuilder.Build(transform, this, buildRuntimeAlinaForceToggle);
+            hud = GeofenceRuntimeUiBuilder.Build(transform, this, buildRuntimeForceGeofenceToggles);
 
         if (developerSceneUnlock == null)
-            developerSceneUnlock = FindFirstObjectByType<AddressableLabeledSceneButton>();
+            developerSceneUnlock = FindFirstObjectByType<DeveloperSceneUnlockButton>();
         if (developerSceneUnlock != null)
             BindDeveloperSceneUnlock(developerSceneUnlock);
 
@@ -133,24 +131,23 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
 
         GeoDebug(
             $"init scene={SceneManager.GetActiveScene().name} enterRadiusKm={ExperienceGeofenceDefinition.EnterGeofenceKm:F4} " +
-            $"editorLocSim={(UseSimulatedLocation ? "on" : "off")} forceAlina={(forceAtAlinaGeofence ? "on" : "off")}");
+            $"editorLocSim={(UseSimulatedLocation ? "on" : "off")} forceGeofence={(TryGetForcedGeofence(out var forced) ? forced.SceneName : "off")}");
     }
 
     private void OnDestroy()
     {
-        if (addressables != null)
+        if (sceneLoader != null)
         {
-            addressables.OnNotify -= OnAddressablesNotify;
-            addressables.OnSceneLoadSucceeded -= OnExperienceSceneLoaded;
+            sceneLoader.OnNotify -= OnSceneLoaderNotify;
+            sceneLoader.OnSceneLoadSucceeded -= OnExperienceSceneLoaded;
         }
     }
 
-    private void OnExperienceSceneLoaded(string label)
+    private void OnExperienceSceneLoaded(string sceneName)
     {
         HideHostMenuCanvas();
     }
 
-    /// <summary>Button-friendly alias for <see cref="LoadNearestExperienceFromUi"/>.</summary>
     public void LoadNearestExperience() => LoadNearestExperienceFromUi();
 
     private void Start()
@@ -159,77 +156,69 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
             _locationStart = StartCoroutine(StartLocationService());
     }
 
-    /// <summary>
-    /// Call from the START button when <see cref="IsNearestWithinEnterRadius"/> and Addressables report ready for the nearest label.
-    /// </summary>
     public void LoadNearestExperienceFromUi()
     {
-        if (addressables == null)
+        if (sceneLoader == null)
         {
-            GeoDebug("START: ignored (AddressableLoadingManager missing)");
+            GeoDebug("START: ignored (ExperienceSceneLoadingManager missing)");
             return;
         }
 
         if (developerSceneUnlock != null && developerSceneUnlock.IsUnlocked)
         {
-            if (!addressables.IsReadyForLabel(developerSceneUnlock.AddressableLabel))
+            var devScene = developerSceneUnlock.DeveloperSceneName;
+            if (!sceneLoader.IsReadyForScene(devScene))
             {
-                GeoDebug(
-                    $"START (dev): ignored (not ready) label='{developerSceneUnlock.AddressableLabel}' state={addressables.State}");
+                GeoDebug($"START (dev): ignored (not ready) scene='{devScene}' state={sceneLoader.State}");
                 return;
             }
 
             var devActive = SceneManager.GetActiveScene().name;
-            if (devActive == AddressableLabeledSceneButton.DevSceneName)
+            if (devActive == DeveloperSceneUnlockButton.DevSceneName)
             {
                 GeoDebug($"START (dev): ignored (already in scene) active='{devActive}'");
                 return;
             }
 
-            GeoDebug(
-                $"START (dev): loading label='{developerSceneUnlock.AddressableLabel}' from activeScene='{devActive}'");
+            GeoDebug($"START (dev): loading scene='{devScene}' from activeScene='{devActive}'");
             RefreshMenuCanvasCaptureAtStartClick();
             StartCoroutine(HideHostMenuCanvasWhenSceneLeaves(devActive));
-            addressables.LoadSceneIfReady(developerSceneUnlock.AddressableLabel);
+            sceneLoader.LoadSceneIfReady(devScene);
             return;
         }
 
-        var label = _lastNearest.AddressableLabel;
-        if (string.IsNullOrEmpty(label))
+        var sceneName = _lastNearest.SceneName;
+        if (string.IsNullOrEmpty(sceneName))
         {
-            GeoDebug("START: ignored (no nearest label yet — wait for GPS fix)");
+            GeoDebug("START: ignored (no nearest scene yet — wait for GPS fix)");
             return;
         }
 
         if (!IsNearestWithinEnterRadius)
         {
-            GeoDebug($"START: ignored (outside enter radius) label='{label}'");
+            GeoDebug($"START: ignored (outside enter radius) scene='{sceneName}'");
             return;
         }
 
-        if (!addressables.IsReadyForLabel(label))
+        if (!sceneLoader.IsReadyForScene(sceneName))
         {
-            GeoDebug($"START: ignored (Addressables not ready) label='{label}' state={addressables.State}");
+            GeoDebug($"START: ignored (scene not ready) scene='{sceneName}' state={sceneLoader.State}");
             return;
         }
 
         var activeScene = SceneManager.GetActiveScene().name;
-        if (activeScene == _lastNearest.SceneName)
+        if (activeScene == sceneName)
         {
             GeoDebug($"START: ignored (already in scene) active='{activeScene}'");
             return;
         }
 
-        GeoDebug($"START: loading scene label='{label}' from activeScene='{activeScene}' → target='{_lastNearest.SceneName}'");
+        GeoDebug($"START: loading scene='{sceneName}' from activeScene='{activeScene}'");
         RefreshMenuCanvasCaptureAtStartClick();
         StartCoroutine(HideHostMenuCanvasWhenSceneLeaves(activeScene));
-        addressables.LoadSceneIfReady(label);
+        sceneLoader.LoadSceneIfReady(sceneName);
     }
 
-    /// <summary>
-    /// Addressables scene handles do not always report Succeeded even when the load completes; hiding when the
-    /// active scene actually changes is reliable for DontDestroyOnLoad menu roots.
-    /// </summary>
     private IEnumerator HideHostMenuCanvasWhenSceneLeaves(string sceneNameBeforeLoad)
     {
         const float timeoutSec = 45f;
@@ -246,9 +235,6 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
         return c != null && c.gameObject.name == GeofenceRuntimeUiBuilder.RuntimeHudCanvasObjectName;
     }
 
-    /// <summary>
-    /// Prefers inspector override, then a parent canvas, then any child canvas except the runtime Geofence HUD canvas.
-    /// </summary>
     private Canvas FindPreferredMenuCanvas()
     {
         if (menuCanvasToHideAfterLoad != null)
@@ -282,7 +268,6 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
             _menuCanvasCapturedAtStartClick = _hostCanvas;
         else
             _menuCanvasCapturedAtStartClick = FindPreferredMenuCanvas();
-
     }
 
     private Canvas ResolveHostMenuCanvas()
@@ -347,53 +332,52 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
 
         var devUnlocked = developerSceneUnlock != null && developerSceneUnlock.IsUnlocked;
         if (!devUnlocked &&
-            !string.Equals(_lastPrefetchLabel, nearest.AddressableLabel, System.StringComparison.Ordinal))
+            !string.Equals(_lastPrefetchSceneName, nearest.SceneName, System.StringComparison.Ordinal))
         {
-            _lastPrefetchLabel = nearest.AddressableLabel;
-            GeoDebug(
-                $"prefetch label='{nearest.AddressableLabel}' scene='{nearest.SceneName}' (Addressables download)");
-            addressables.BeginOrContinueDownload(nearest.AddressableLabel);
+            _lastPrefetchSceneName = nearest.SceneName;
+            GeoDebug($"prepare nearest scene='{nearest.SceneName}' ({nearest.ExperienceName})");
+            sceneLoader.PrepareScene(nearest.SceneName);
         }
 
         var inRange = distanceKm <= ExperienceGeofenceDefinition.EnterGeofenceKm;
         IsNearestWithinEnterRadius = inRange;
-        var ready = addressables.IsReadyForLabel(nearest.AddressableLabel);
+        var ready = sceneLoader.IsReadyForScene(nearest.SceneName);
         var activeScene = SceneManager.GetActiveScene().name;
 
         if (!_hadGpsFixForState)
         {
             _hadGpsFixForState = true;
             _prevInRange = inRange;
-            _prevAddrReady = ready;
+            _prevSceneReady = ready;
             _nextExperienceFindLog = Time.unscaledTime;
             _nextStartBlockedLog = Time.unscaledTime;
         }
 
         var rangeChanged = inRange != _prevInRange;
-        var readyChanged = ready != _prevAddrReady;
+        var readyChanged = ready != _prevSceneReady;
         if (rangeChanged || readyChanged)
         {
             var wasIn = _prevInRange;
-            var wasReady = _prevAddrReady;
+            var wasReady = _prevSceneReady;
             GeoDebug(
                 $"geofence state nearest='{nearest.ExperienceName}' distKm={distanceKm:F3} " +
-                $"inRange={wasIn}→{inRange} addrReady={wasReady}→{ready} activeScene='{activeScene}' label='{nearest.AddressableLabel}'");
+                $"inRange={wasIn}→{inRange} sceneReady={wasReady}→{ready} activeScene='{activeScene}' target='{nearest.SceneName}'");
             _prevInRange = inRange;
-            _prevAddrReady = ready;
+            _prevSceneReady = ready;
         }
 
         if (debugLogGeofence && Time.unscaledTime >= _nextExperienceFindLog)
         {
             _nextExperienceFindLog = Time.unscaledTime + experienceFindLogSeconds;
             GeoDebug(
-                $"nearest experience lat={lat:F5} lon={lon:F5} hAcc={hAccM:F0}m sim={UseSimulatedLocation} forceAlina={forceAtAlinaGeofence} " +
-                $"name='{nearest.ExperienceName}' distKm={distanceKm:F3} inRange={inRange} addrReady={ready} " +
-                $"scene='{activeScene}' label='{nearest.AddressableLabel}'");
+                $"nearest experience lat={lat:F5} lon={lon:F5} hAcc={hAccM:F0}m sim={UseSimulatedLocation} forceGeofence={(TryGetForcedGeofence(out var f) ? f.SceneName : "off")} " +
+                $"name='{nearest.ExperienceName}' distKm={distanceKm:F3} inRange={inRange} sceneReady={ready} " +
+                $"activeScene='{activeScene}' target='{nearest.SceneName}'");
         }
 
         if (devUnlocked)
         {
-            var devReady = addressables.IsReadyForLabel(developerSceneUnlock.AddressableLabel);
+            var devReady = sceneLoader.IsReadyForScene(developerSceneUnlock.DeveloperSceneName);
             if (loadingWidget != null)
                 loadingWidget.SetActive(!devReady);
 
@@ -401,8 +385,8 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
             {
                 _nextStartBlockedLog = Time.unscaledTime + startBlockedLogSeconds;
                 GeoDebug(
-                    "START (dev) blocked (still downloading): " +
-                    addressables.BuildStartBlockedSummary(developerSceneUnlock.AddressableLabel, inRange: true));
+                    "START (dev) blocked: " +
+                    sceneLoader.BuildStartBlockedSummary(developerSceneUnlock.DeveloperSceneName, inRange: true));
             }
         }
         else if (inRange)
@@ -416,13 +400,13 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
                 var alreadyInNearestScene =
                     string.Equals(activeScene, nearest.SceneName, System.StringComparison.Ordinal);
 
-                if (!onMenuOrUnknownScene && !alreadyInNearestScene && !addressables.IsSceneLoadInProgress)
+                if (!onMenuOrUnknownScene && !alreadyInNearestScene && !sceneLoader.IsSceneLoadInProgress)
                 {
                     GeoDebug(
-                        $"auto-load (in experience scene) label='{nearest.AddressableLabel}' '{activeScene}' → '{nearest.SceneName}'");
+                        $"auto-load (in experience scene) '{activeScene}' → '{nearest.SceneName}'");
                     RefreshMenuCanvasCaptureAtStartClick();
                     StartCoroutine(HideHostMenuCanvasWhenSceneLeaves(activeScene));
-                    addressables.LoadSceneIfReady(nearest.AddressableLabel);
+                    sceneLoader.LoadSceneIfReady(nearest.SceneName);
                 }
             }
             else
@@ -434,8 +418,8 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
                 {
                     _nextStartBlockedLog = Time.unscaledTime + startBlockedLogSeconds;
                     GeoDebug(
-                        "START blocked (in geofence, still downloading): " +
-                        addressables.BuildStartBlockedSummary(nearest.AddressableLabel, inRange));
+                        "START blocked (in geofence, scene not ready): " +
+                        sceneLoader.BuildStartBlockedSummary(nearest.SceneName, inRange));
                 }
             }
         }
@@ -524,7 +508,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
         hud?.SetUserMessage(string.Empty, null);
     }
 
-    private void OnAddressablesNotify(string user, string debug)
+    private void OnSceneLoaderNotify(string user, string debug)
     {
         hud?.SetUserMessage(user, null);
     }
@@ -535,22 +519,21 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
             Debug.Log("[FAW] " + message);
     }
 
-    /// <summary>True only in Unity Editor when <see cref="simulateLocationInEditor"/> is checked.</summary>
     private bool UseSimulatedLocation => Application.isEditor && simulateLocationInEditor;
 
     private bool IsLocationServiceRunning()
     {
-        if (forceAtAlinaGeofence || UseSimulatedLocation)
+        if (AnyForceGeofenceEnabled || UseSimulatedLocation)
             return true;
         return Input.location.status == LocationServiceStatus.Running;
     }
 
     private bool TryGetLastLocation(out double latitude, out double longitude, out float horizontalAccuracyMeters)
     {
-        if (forceAtAlinaGeofence && ExperienceGeofenceDefinition.TryGetByExperienceName("Alina", out var alina))
+        if (TryGetForcedGeofence(out var forced))
         {
-            latitude = alina.Latitude;
-            longitude = alina.Longitude;
+            latitude = forced.Latitude;
+            longitude = forced.Longitude;
             horizontalAccuracyMeters = 5f;
             return true;
         }
@@ -568,5 +551,86 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
         longitude = loc.longitude;
         horizontalAccuracyMeters = loc.horizontalAccuracy;
         return !(latitude == 0d && longitude == 0d);
+    }
+
+    private bool AnyForceGeofenceEnabled =>
+        forceBenaroyaGeofence || forceAlinaGeofence || forceSampleSceneGeofence ||
+        forceChenoaGeofence || forceDanGeofence;
+
+    private bool TryGetForcedGeofence(out ExperienceGeofenceDefinition definition)
+    {
+        foreach (var def in ExperienceGeofenceDefinition.All)
+        {
+            if (IsForceGeofenceEnabledForScene(def.SceneName))
+            {
+                definition = def;
+                return true;
+            }
+        }
+
+        definition = default;
+        return false;
+    }
+
+    private bool IsForceGeofenceEnabledForScene(string sceneName)
+    {
+        if (string.IsNullOrEmpty(sceneName))
+            return false;
+
+        foreach (var def in ExperienceGeofenceDefinition.All)
+        {
+            if (!string.Equals(def.SceneName, sceneName, System.StringComparison.Ordinal))
+                continue;
+
+            return def.SceneName switch
+            {
+                "benaroyaScene" => forceBenaroyaGeofence,
+                "AlinaScene" => forceAlinaGeofence,
+                "SampleScene" => forceSampleSceneGeofence,
+                "ChenoaScene" => forceChenoaGeofence,
+                "DanScene" => forceDanGeofence,
+                _ => false
+            };
+        }
+
+        return false;
+    }
+
+    private bool TrySetForceGeofenceForScene(string sceneName, bool value)
+    {
+        if (string.IsNullOrEmpty(sceneName))
+            return false;
+
+        foreach (var def in ExperienceGeofenceDefinition.All)
+        {
+            if (!string.Equals(def.SceneName, sceneName, System.StringComparison.Ordinal))
+                continue;
+
+            switch (def.SceneName)
+            {
+                case "benaroyaScene":
+                    if (forceBenaroyaGeofence == value) return false;
+                    forceBenaroyaGeofence = value;
+                    return true;
+                case "AlinaScene":
+                    if (forceAlinaGeofence == value) return false;
+                    forceAlinaGeofence = value;
+                    return true;
+                case "SampleScene":
+                    if (forceSampleSceneGeofence == value) return false;
+                    forceSampleSceneGeofence = value;
+                    return true;
+                case "ChenoaScene":
+                    if (forceChenoaGeofence == value) return false;
+                    forceChenoaGeofence = value;
+                    return true;
+                case "DanScene":
+                    if (forceDanGeofence == value) return false;
+                    forceDanGeofence = value;
+                    return true;
+            }
+        }
+
+        return false;
     }
 }

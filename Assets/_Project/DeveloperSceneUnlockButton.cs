@@ -1,25 +1,27 @@
 using TMPro;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 /// <summary>
 /// Hidden unlock: tap the wired button <see cref="tapsRequired"/> times to show a developer message,
-/// prefetch the labeled Addressables scene (default <c>dev</c>), then use the normal START button when ready.
-/// Must use the same <see cref="AddressableLoadingManager"/> as <see cref="GeofenceExperienceCoordinator"/>
-/// (assigned via <see cref="Bind"/> — do not rely on FindFirstObjectByType, which can hit legacy menu buttons).
+/// then use the normal START button to open <see cref="DevSceneName"/>.
 /// </summary>
 [DisallowMultipleComponent]
-public class AddressableLabeledSceneButton : MonoBehaviour
+public class DeveloperSceneUnlockButton : MonoBehaviour
 {
     public const string DevSceneName = "devScene";
 
-    [SerializeField] private string addressableLabel = "dev";
+    [FormerlySerializedAs("addressableLabel")]
+    [SerializeField] private string devSceneName = DevSceneName;
+
     [SerializeField] private int tapsRequired = 5;
     [Tooltip("If > 0, tap count resets when gaps between taps exceed this many seconds.")]
     [SerializeField] private float tapSequenceTimeoutSeconds = 3f;
     [SerializeField] private string unlockMessage =
-        "Developer scene unlocked. Press START when done loading addressable.";
+        "Developer scene unlocked. Press START to open the developer scene.";
 
-    [SerializeField] private AddressableLoadingManager addressables;
+    [FormerlySerializedAs("addressables")]
+    [SerializeField] private ExperienceSceneLoadingManager sceneLoader;
     [SerializeField] private GeofenceHudView hud;
     [Tooltip("Used when Geofence Hud View is not assigned.")]
     [SerializeField] private TextMeshProUGUI fallbackMessageText;
@@ -28,38 +30,40 @@ public class AddressableLabeledSceneButton : MonoBehaviour
     private float _lastTapUnscaledTime;
 
     public bool IsUnlocked { get; private set; }
-    public string AddressableLabel => addressableLabel;
+    public string DeveloperSceneName =>
+        string.IsNullOrEmpty(devSceneName) ||
+        string.Equals(devSceneName, "dev", System.StringComparison.Ordinal)
+            ? DevSceneName
+            : devSceneName;
 
     private void Start()
     {
         EnsureBoundToGeofenceCoordinator();
     }
 
-    /// <summary>Called by <see cref="GeofenceExperienceCoordinator"/> so downloads use the shared manager.</summary>
-    public void Bind(GeofenceExperienceCoordinator coordinator, AddressableLoadingManager manager, GeofenceHudView hudView)
+    public void Bind(GeofenceExperienceCoordinator coordinator, ExperienceSceneLoadingManager manager, GeofenceHudView hudView)
     {
         if (manager != null)
-            addressables = manager;
+            sceneLoader = manager;
         if (hudView != null)
             hud = hudView;
 
-        if (IsUnlocked && addressables != null)
-            addressables.BeginOrContinueDownload(addressableLabel);
+        if (IsUnlocked && sceneLoader != null)
+            sceneLoader.PrepareScene(DeveloperSceneName);
     }
 
     private void EnsureBoundToGeofenceCoordinator()
     {
-        if (addressables != null)
+        if (sceneLoader != null)
             return;
 
         var coordinator = FindFirstObjectByType<GeofenceExperienceCoordinator>();
         if (coordinator != null)
             coordinator.BindDeveloperSceneUnlock(this);
         else
-            Debug.LogWarning("[FAW] AddressableLabeledSceneButton: GeofenceExperienceCoordinator not found.");
+            Debug.LogWarning("[FAW] DeveloperSceneUnlockButton: GeofenceExperienceCoordinator not found.");
     }
 
-    /// <summary>Wire to the hidden UI Button onClick (each tap).</summary>
     public void RegisterUnlockTap()
     {
         if (IsUnlocked)
@@ -89,18 +93,18 @@ public class AddressableLabeledSceneButton : MonoBehaviour
         _tapCount = 0;
         EnsureBoundToGeofenceCoordinator();
 
-        if (addressables == null)
+        if (sceneLoader == null)
         {
-            Debug.LogError("[FAW] AddressableLabeledSceneButton: shared AddressableLoadingManager not bound.");
-            ShowUnlockMessage("Developer scene unlock failed (missing Addressables).");
+            Debug.LogError("[FAW] DeveloperSceneUnlockButton: shared ExperienceSceneLoadingManager not bound.");
+            ShowUnlockMessage("Developer scene unlock failed (missing scene loader).");
             return;
         }
 
         Debug.Log(
-            $"[FAW] Developer scene unlocked — prefetch label='{addressableLabel}' " +
-            $"managerId={addressables.GetInstanceID()} activeLabel='{addressables.ActiveLabel}' state={addressables.State}");
+            $"[FAW] Developer scene unlocked — prepare scene='{DeveloperSceneName}' " +
+            $"managerId={sceneLoader.GetInstanceID()} activeScene='{sceneLoader.ActiveSceneName}' state={sceneLoader.State}");
         ShowUnlockMessage(unlockMessage);
-        addressables.BeginOrContinueDownload(addressableLabel);
+        sceneLoader.PrepareScene(DeveloperSceneName);
     }
 
     private void ShowUnlockMessage(string text)
