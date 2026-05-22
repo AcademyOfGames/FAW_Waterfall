@@ -5,6 +5,7 @@
     <type fullname="Calliope" preserve="all" />
     <type fullname="FrequencyAnalyzer" preserve="all" />
     <type fullname="FrequencyBandVisualizer" preserve="all" />
+    <type fullname="LocalForwardMotion" preserve="all" />
     <type fullname="LogToTMP" preserve="all" />
     <type fullname="RandomOneAtATimeActivator" preserve="all" />
     <type fullname="RuntimeLogConsole" preserve="all" />
