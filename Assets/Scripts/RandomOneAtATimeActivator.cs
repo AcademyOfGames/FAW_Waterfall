@@ -14,8 +14,10 @@ public class RandomOneAtATimeActivator : MonoBehaviour
     [SerializeField] private float maxSwitchIntervalSeconds = 1.5f;
     public VertexPathSwarmFollower vertexPathSwarmFollower;
     [SerializeField] private float swarmStartDelaySeconds = 3f;
+    [SerializeField] private float followerActivateStaggerSeconds = 3f;
 
     private Coroutine _activationRoutine;
+
     private void Start()
     {
         if (_activationRoutine != null)
@@ -29,56 +31,61 @@ public class RandomOneAtATimeActivator : MonoBehaviour
     private IEnumerator ActivateRandomlyOverTime()
     {
         List<GameObject> validTargets = GetValidTargets();
-        if (validTargets.Count == 0)
+        if (validTargets.Count > 0)
         {
-            yield break;
-        }
+            List<GameObject> pendingTargets = new List<GameObject>(validTargets);
+            ActivateRandomPending(pendingTargets);
 
-        List<GameObject> pendingTargets = new List<GameObject>(validTargets);
-        ActivateRandomPending(pendingTargets); // Activate one immediately at start.
+            float elapsed = 0f;
+            float minInterval = Mathf.Max(0f, minSwitchIntervalSeconds);
+            float maxInterval = Mathf.Max(minInterval, maxSwitchIntervalSeconds);
 
-        float elapsed = 0f;
-        float minInterval = Mathf.Max(0f, minSwitchIntervalSeconds);
-        float maxInterval = Mathf.Max(minInterval, maxSwitchIntervalSeconds);
-
-        while (pendingTargets.Count > 0 && elapsed < totalDurationSeconds)
-        {
-            float remainingTime = totalDurationSeconds - elapsed;
-            int activationsLeftAfterThisWait = pendingTargets.Count - 1;
-            float minWaitNeededNow = Mathf.Max(0f, remainingTime - (activationsLeftAfterThisWait * maxInterval));
-            float maxWaitAllowedNow = Mathf.Max(0f, remainingTime - (activationsLeftAfterThisWait * minInterval));
-
-            float waitLowerBound = Mathf.Min(maxWaitAllowedNow, Mathf.Max(minInterval, minWaitNeededNow));
-            float waitUpperBound = Mathf.Min(maxInterval, maxWaitAllowedNow);
-            if (waitUpperBound < waitLowerBound)
+            while (pendingTargets.Count > 0 && elapsed < totalDurationSeconds)
             {
-                waitLowerBound = waitUpperBound;
+                float remainingTime = totalDurationSeconds - elapsed;
+                int activationsLeftAfterThisWait = pendingTargets.Count - 1;
+                float minWaitNeededNow = Mathf.Max(0f, remainingTime - (activationsLeftAfterThisWait * maxInterval));
+                float maxWaitAllowedNow = Mathf.Max(0f, remainingTime - (activationsLeftAfterThisWait * minInterval));
+
+                float waitLowerBound = Mathf.Min(maxWaitAllowedNow, Mathf.Max(minInterval, minWaitNeededNow));
+                float waitUpperBound = Mathf.Min(maxInterval, maxWaitAllowedNow);
+                if (waitUpperBound < waitLowerBound)
+                {
+                    waitLowerBound = waitUpperBound;
+                }
+
+                float waitTime = waitUpperBound > waitLowerBound
+                    ? Random.Range(waitLowerBound, waitUpperBound)
+                    : waitLowerBound;
+
+                yield return new WaitForSeconds(waitTime);
+                elapsed += waitTime;
+
+                if (elapsed <= totalDurationSeconds && pendingTargets.Count > 0)
+                {
+                    ActivateRandomPending(pendingTargets);
+                }
             }
 
-            float waitTime = waitUpperBound > waitLowerBound
-                ? Random.Range(waitLowerBound, waitUpperBound)
-                : waitLowerBound;
-
-            yield return new WaitForSeconds(waitTime);
-            elapsed += waitTime;
-
-            if (elapsed <= totalDurationSeconds && pendingTargets.Count > 0)
+            while (pendingTargets.Count > 0)
             {
                 ActivateRandomPending(pendingTargets);
+                yield return null;
             }
         }
 
-        // If timing settings make strict scheduling impossible, finish remaining activations immediately.
-        while (pendingTargets.Count > 0)
-        {
-            ActivateRandomPending(pendingTargets);
-            yield return null;
-        }
+        yield return StartSwarmAfterAllTargetsActivated();
+    }
+
+    private IEnumerator StartSwarmAfterAllTargetsActivated()
+    {
+        yield return new WaitForSeconds(Mathf.Max(0f, swarmStartDelaySeconds));
 
         if (vertexPathSwarmFollower != null)
         {
-            yield return new WaitForSeconds(Mathf.Max(0f, swarmStartDelaySeconds));
-            vertexPathSwarmFollower.ActivateFollowersAndStartSwarm();
+            vertexPathSwarmFollower.ActivateFollowersAndStartSwarm(
+                Mathf.Max(0f, followerActivateStaggerSeconds)
+            );
         }
     }
 

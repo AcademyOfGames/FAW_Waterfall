@@ -86,7 +86,6 @@ public static class GeofenceRuntimeUiBuilder
         if (addForceGeofenceToggles && coordinator != null)
             BuildForceGeofenceToggles(canvasGo.transform, coordinator);
 
-        Debug.Log("[FAW] Geofence: runtime HUD canvas built (TMP + loading widget).");
         return hud;
     }
 

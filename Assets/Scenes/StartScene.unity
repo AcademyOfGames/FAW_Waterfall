@@ -1312,7 +1312,7 @@ MonoBehaviour:
   pollSeconds: 0.75
   dontDestroyOnLoad: 1
   buildRuntimeUiIfMissing: 0
-  debugLogGeofence: 1
+  debugLogGeofence: 0
   experienceFindLogSeconds: 10
   startBlockedLogSeconds: 5
   nearestExperienceNameColor: {r: 0.2784314, g: 0.050980397, b: 0.8196079, a: 1}
@@ -1340,7 +1340,7 @@ MonoBehaviour:
   m_EditorClassIdentifier: 
   legacySceneLabel: 
   postLoadDelaySeconds: 0
-  debugLogScenes: 1
+  debugLogScenes: 0
 --- !u!114 &999900005
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -1356,7 +1356,7 @@ MonoBehaviour:
   statusLine: {fileID: 755953258}
   messageLine: {fileID: 1422795880}
   loadingWidgetRoot: {fileID: 1492712950}
-  debugLogHud: 1
+  debugLogHud: 0
   nearestStatusLogSeconds: 10
 --- !u!114 &999900006
 MonoBehaviour:
@@ -1377,7 +1377,7 @@ MonoBehaviour:
   label: {fileID: 0}
   readyText: START
   optionalButton: {fileID: 507926578}
-  debugLogStartLabel: 1
+  debugLogStartLabel: 0
 --- !u!1 &1002947232
 GameObject:
   m_ObjectHideFlags: 0
@@ -1992,37 +1992,6 @@ CanvasRenderer:
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 1725920550}
   m_CullTransparentMesh: 1
---- !u!1 &1743454207
-GameObject:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  serializedVersion: 6
-  m_Component:
-  - component: {fileID: 1743454208}
-  m_Layer: 0
-  m_Name: GameObject
-  m_TagString: Untagged
-  m_Icon: {fileID: 0}
-  m_NavMeshLayer: 0
-  m_StaticEditorFlags: 0
-  m_IsActive: 1
---- !u!4 &1743454208
-Transform:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 1743454207}
-  serializedVersion: 2
-  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
-  m_LocalPosition: {x: 10.050617, y: 2.3377724, z: 399.9139}
-  m_LocalScale: {x: 1, y: 1, z: 1}
-  m_ConstrainProportionsScale: 0
-  m_Children: []
-  m_Father: {fileID: 0}
-  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!1 &1810579577
 GameObject:
   m_ObjectHideFlags: 0
@@ -2422,4 +2391,3 @@ SceneRoots:
   - {fileID: 625711717}
   - {fileID: 999900002}
   - {fileID: 2022089566}
-  - {fileID: 1743454208}

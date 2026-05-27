@@ -25,7 +25,7 @@ public class ExperienceSceneLoadingManager : MonoBehaviour
     [SerializeField] private float postLoadDelaySeconds;
 
     [FormerlySerializedAs("debugLogAddressables")]
-    [SerializeField] private bool debugLogScenes = true;
+    [SerializeField] private bool debugLogScenes = false;
 
     private string _activeSceneName;
     private SceneLoadState _state = SceneLoadState.Idle;
