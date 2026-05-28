@@ -144,10 +144,6 @@ PlayerSettings:
   bundleVersion: 1.5
   preloadedAssets:
   - {fileID: 0}
-  - {fileID: -4127046171645941210, guid: 4ce52f3b88187134f8374d286a442d26, type: 2}
-  - {fileID: 11400000, guid: 4d85da1eace0d5b40b3e126900036b58, type: 2}
-  - {fileID: 4800000, guid: e7c77f6eaab324a819efdc13b8125a39, type: 3}
-  - {fileID: 4800000, guid: 6743a50a812740be8c0aa3fccc46fae9, type: 3}
   - {fileID: 11400000, guid: 6ba5db84343ecbe4da8296ca1603aac2, type: 2}
   metroInputSource: 0
   wsaTransparentSwapchain: 0
@@ -196,7 +192,7 @@ PlayerSettings:
   VertexChannelCompressionMask: 4054
   iPhoneSdkVersion: 988
   iOSSimulatorArchitecture: 0
-  iOSTargetOSVersionString: 12.0
+  iOSTargetOSVersionString: 13.0
   tvOSSdkVersion: 0
   tvOSSimulatorArchitecture: 0
   tvOSRequireExtendedGameController: 0
@@ -830,7 +826,7 @@ PlayerSettings:
   webGLPowerPreference: 2
   scriptingDefineSymbols:
     Android: ARCORE_INTERNAL_GEOSPATIAL_CREATOR_ENABLED
-    iPhone: ARCORE_INTERNAL_GEOSPATIAL_CREATOR_ENABLED;UNITY_XR_ARKIT_LOADER_ENABLED
+    iPhone: ARCORE_INTERNAL_GEOSPATIAL_CREATOR_ENABLED;UNITY_XR_ARKIT_LOADER_ENABLED;ARCORE_EXTENSIONS_IOS_SUPPORT;GEOSPATIAL_IOS_SUPPORT
   additionalCompilerArguments: {}
   platformArchitecture: {}
   scriptingBackend:
