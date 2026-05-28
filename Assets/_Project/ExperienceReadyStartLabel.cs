@@ -19,7 +19,7 @@ public class ExperienceReadyStartLabel : MonoBehaviour
     [SerializeField] private TextMeshProUGUI label;
     [SerializeField] private string readyText = "START";
     [SerializeField] private Button optionalButton;
-    [SerializeField] private bool debugLogStartLabel = true;
+    [SerializeField] private bool debugLogStartLabel = false;
 
     private bool _showingReady;
     private string _lastNearestSceneForLog;

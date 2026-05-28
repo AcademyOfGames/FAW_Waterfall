@@ -1,114 +1,86 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine.Serialization;
 using Google.XR.ARCoreExtensions;
+using Google.XR.ARCoreExtensions.GeospatialCreator;
 using UnityEngine;
 using UnityEngine.XR.ARFoundation;
-
-#if UNITY_ANDROID
-using UnityEngine.Android;
-#endif
+using UnityEngine.XR.ARSubsystems;
 
 /// <summary>
-/// Attach in AR Geospatial scenes. Logs Earth tracking and AR session state on an interval (filter logcat with "FAW").
+/// VPS localization diagnostics for AR Geospatial scenes. Filter logcat with "FAW".
+/// Logs phase transitions, periodic accuracy while settling, and VPS coverage at device + anchors.
 /// </summary>
 [DefaultExecutionOrder(-100)]
 public class ARSessionCameraDebugLog : MonoBehaviour
 {
-    [SerializeField]
-    private float logIntervalSeconds = 5f;
+    private enum VpsSettlePhase
+    {
+        WaitingSession,
+        WaitingEarth,
+        Settling,
+        Localized,
+        Degraded,
+    }
+
+    private struct GeoPoint
+    {
+        public string Label;
+        public double Latitude;
+        public double Longitude;
+    }
 
     [SerializeField]
-    private bool logOnSessionStateChanged = true;
+    [Tooltip("While settling, log accuracy at this interval (seconds). 0 = only on phase changes.")]
+    private float logIntervalSeconds = 4f;
 
     [SerializeField]
-    [Tooltip("Android only: log Permission.Camera on Awake / resume (enable if camera stays black).")]
-    private bool logCameraPermissionExplicitly = false;
+    [Tooltip("Horizontal accuracy (m) at or below this = Localized (sample app uses 20).")]
+    private double horizontalLocalizedThresholdMeters = 20.0;
 
-    private ARCoreExtensions _arCoreExtensions;
+    [SerializeField]
+    [Tooltip("Horizontal accuracy (m) at or below this = good enough for tight anchor placement.")]
+    private double horizontalGoodThresholdMeters = 10.0;
+
+    [SerializeField]
+    [Tooltip("Horizontal accuracy (m) at or below this = excellent VPS lock.")]
+    private double horizontalExcellentThresholdMeters = 5.0;
+
+    [FormerlySerializedAs("checkVpsAvailabilityAtAnchorLocation")]
+    [SerializeField]
+    [Tooltip("Query Google VPS coverage at the device and at each Geospatial Creator anchor in the scene.")]
+    private bool checkVpsAvailability = true;
+
     private AREarthManager _earthManager;
-    private ARCameraManager _cameraManager;
-    private ARCameraBackground _cameraBackground;
     private ARSession _session;
 
+    private VpsSettlePhase _phase = VpsSettlePhase.WaitingSession;
+    private ARSessionState _lastSessionState = ARSessionState.None;
     private float _nextPeriodicLogTime;
+    private bool _vpsCoverageChecksStarted;
+    private readonly HashSet<string> _vpsQueriedKeys = new HashSet<string>();
 
-#if UNITY_ANDROID
-    private bool? _lastLoggedCameraPermission;
-#endif
+    /// <summary>True when Earth is tracking and horizontal accuracy is within the localized threshold.</summary>
+    public bool IsVpsLocalized =>
+        _phase == VpsSettlePhase.Localized;
+
+    /// <summary>True when horizontal accuracy is at or below the excellent threshold.</summary>
+    public bool IsVpsExcellent { get; private set; }
 
     private void Awake()
     {
-        _arCoreExtensions = FindObjectOfType<ARCoreExtensions>();
         _earthManager = FindObjectOfType<AREarthManager>();
-        _cameraManager = FindObjectOfType<ARCameraManager>();
-        _cameraBackground = FindObjectOfType<ARCameraBackground>();
         _session = FindObjectOfType<ARSession>();
 
-        if (_arCoreExtensions == null)
-            Debug.LogWarning("[FAW] AR Geospatial: No ARCoreExtensions in scene.");
-
-        if (_session == null)
-            Debug.LogWarning("[FAW] AR Geospatial: No ARSession in scene.");
-
-        if (_cameraManager == null)
-            Debug.LogWarning("[FAW] AR Geospatial: No ARCameraManager (no passthrough).");
-        else if (_cameraBackground == null)
-            Debug.LogWarning("[FAW] AR Geospatial: ARCameraBackground missing on AR camera (passthrough usually needs it).");
-
         if (_earthManager == null)
-            Debug.LogWarning("[FAW] AR Geospatial: No AREarthManager (Earth / Geospatial API unavailable).");
-
-        if (logCameraPermissionExplicitly)
         {
-            LogCameraPermissionStatus("Awake");
+            Debug.LogWarning("[FAW] VPS: No AREarthManager — geospatial accuracy logging disabled.");
         }
-    }
-
-    private void Start()
-    {
-        if (logCameraPermissionExplicitly)
-        {
-            LogCameraPermissionStatus("Start");
-        }
-    }
-
-    private void OnApplicationPause(bool pauseStatus)
-    {
-        if (pauseStatus || !logCameraPermissionExplicitly)
-        {
-            return;
-        }
-
-        LogCameraPermissionStatus("AppResumed");
-    }
-
-    private void LogCameraPermissionStatus(string context)
-    {
-#if UNITY_ANDROID
-        if (Application.isEditor)
-            return;
-
-        bool granted = Permission.HasUserAuthorizedPermission(Permission.Camera);
-        Debug.Log(
-            "[FAW] AR Geospatial: Android Permission.Camera (" + context + ") = " +
-            (granted ? "GRANTED" : "NOT_GRANTED"));
-
-        if (_lastLoggedCameraPermission.HasValue && _lastLoggedCameraPermission.Value != granted)
-        {
-            Debug.LogWarning(
-                "[FAW] AR Geospatial: Camera permission changed " +
-                (_lastLoggedCameraPermission.Value ? "GRANTED" : "NOT_GRANTED") + " -> " +
-                (granted ? "GRANTED" : "NOT_GRANTED"));
-        }
-
-        _lastLoggedCameraPermission = granted;
-#endif
     }
 
     private void OnEnable()
     {
-        if (logOnSessionStateChanged)
-        {
-            ARSession.stateChanged += OnARSessionStateChanged;
-        }
+        ARSession.stateChanged += OnARSessionStateChanged;
     }
 
     private void OnDisable()
@@ -118,61 +90,299 @@ public class ARSessionCameraDebugLog : MonoBehaviour
 
     private void OnARSessionStateChanged(ARSessionStateChangedEventArgs args)
     {
-        Debug.Log(
-            $"[FAW] AR Geospatial: ARSession.state={args.state} notTrackingReason={ARSession.notTrackingReason}");
+        if (args.state == _lastSessionState)
+        {
+            return;
+        }
+
+        if (IsInterestingSessionTransition(_lastSessionState, args.state))
+        {
+            Debug.Log(
+                $"[FAW] VPS: ARSession {_lastSessionState} -> {args.state} " +
+                $"(notTracking={ARSession.notTrackingReason})");
+        }
+
+        _lastSessionState = args.state;
+    }
+
+    private static bool IsInterestingSessionTransition(ARSessionState from, ARSessionState to)
+    {
+        return to == ARSessionState.SessionTracking
+            || to == ARSessionState.Ready
+            || to == ARSessionState.Unsupported
+            || to == ARSessionState.None
+            || from == ARSessionState.SessionTracking;
     }
 
     private void Update()
     {
-        if (logIntervalSeconds <= 0f)
+        if (_earthManager == null)
         {
             return;
         }
 
-        if (Time.unscaledTime < _nextPeriodicLogTime)
+        VpsSettlePhase newPhase = EvaluatePhase(out GeospatialPose? pose, out string detail);
+
+        if (newPhase != _phase)
         {
-            return;
+            LogPhaseChange(_phase, newPhase, pose, detail);
+            _phase = newPhase;
+            _nextPeriodicLogTime = Time.unscaledTime + Mathf.Max(1f, logIntervalSeconds);
+        }
+        else if (ShouldLogPeriodic(newPhase))
+        {
+            if (Time.unscaledTime >= _nextPeriodicLogTime)
+            {
+                _nextPeriodicLogTime = Time.unscaledTime + Mathf.Max(1f, logIntervalSeconds);
+                LogAccuracySnapshot(newPhase, pose, detail, periodic: true);
+            }
         }
 
-        _nextPeriodicLogTime = Time.unscaledTime + logIntervalSeconds;
-        LogPeriodicSnapshot();
+        if (checkVpsAvailability
+            && pose.HasValue
+            && !_vpsCoverageChecksStarted)
+        {
+            _vpsCoverageChecksStarted = true;
+            StartCoroutine(RunVpsCoverageChecks(pose.Value));
+        }
     }
 
-    private void LogPeriodicSnapshot()
+    private VpsSettlePhase EvaluatePhase(out GeospatialPose? pose, out string detail)
     {
-        bool sessionSubsystemRunning =
-            _session != null && _session.subsystem != null && _session.subsystem.running;
+        pose = null;
+        detail = string.Empty;
 
-        string cameraSubsystem = "no ARCameraManager";
-        if (_cameraManager != null && _cameraManager.subsystem != null)
+        if (_session == null || ARSession.state != ARSessionState.SessionTracking)
         {
-            cameraSubsystem = $"running={_cameraManager.subsystem.running}";
+            IsVpsExcellent = false;
+            detail = $"ARSession.state={ARSession.state}";
+            return VpsSettlePhase.WaitingSession;
         }
 
-        string earthLine = "AREarthManager missing";
-        if (_earthManager != null)
+        EarthState earthState = _earthManager.EarthState;
+        TrackingState earthTracking = _earthManager.EarthTrackingState;
+
+        if (earthState != EarthState.Enabled)
         {
-            try
-            {
-                earthLine =
-                    $"EarthState={_earthManager.EarthState}, EarthTracking={_earthManager.EarthTrackingState}";
-            }
-            catch (System.Exception ex)
-            {
-                earthLine = $"Earth query failed: {ex.Message}";
-            }
+            IsVpsExcellent = false;
+            detail = $"EarthState={earthState}";
+            return VpsSettlePhase.WaitingEarth;
         }
 
-#if UNITY_ANDROID
-        bool camPerm = Permission.HasUserAuthorizedPermission(Permission.Camera);
-        string perm = $", androidCameraPermission={camPerm}";
-#else
-        string perm = string.Empty;
-#endif
+        if (earthTracking != TrackingState.Tracking)
+        {
+            IsVpsExcellent = false;
+            detail = $"EarthTracking={earthTracking}";
+            return VpsSettlePhase.WaitingEarth;
+        }
+
+        GeospatialPose p = _earthManager.CameraGeospatialPose;
+        pose = p;
+
+        if (_phase == VpsSettlePhase.Localized
+            && p.HorizontalAccuracy > horizontalLocalizedThresholdMeters * 1.5)
+        {
+            IsVpsExcellent = false;
+            detail = FormatAccuracy(p) + " (accuracy worsened)";
+            return VpsSettlePhase.Degraded;
+        }
+
+        if (p.HorizontalAccuracy <= horizontalExcellentThresholdMeters)
+        {
+            IsVpsExcellent = true;
+        }
+        else
+        {
+            IsVpsExcellent = false;
+        }
+
+        detail = FormatAccuracy(p);
+
+        if (p.HorizontalAccuracy <= horizontalLocalizedThresholdMeters)
+        {
+            return VpsSettlePhase.Localized;
+        }
+
+        return VpsSettlePhase.Settling;
+    }
+
+    private bool ShouldLogPeriodic(VpsSettlePhase phase)
+    {
+        if (logIntervalSeconds <= 0f)
+        {
+            return false;
+        }
+
+        return phase == VpsSettlePhase.Settling
+            || phase == VpsSettlePhase.Degraded
+            || (phase == VpsSettlePhase.Localized && !IsVpsExcellent);
+    }
+
+    private void LogPhaseChange(
+        VpsSettlePhase from,
+        VpsSettlePhase to,
+        GeospatialPose? pose,
+        string detail)
+    {
+        string qualityHint = to switch
+        {
+            VpsSettlePhase.Settling =>
+                "walk outdoors slowly; accuracy should improve over 30–60s",
+            VpsSettlePhase.Localized =>
+                IsVpsExcellent
+                    ? "excellent lock — safe to trust anchor alignment"
+                    : "localized — anchors OK; wait for <5m horiz. for best alignment",
+            VpsSettlePhase.Degraded =>
+                "VPS lock weakened — content may drift until accuracy recovers",
+            VpsSettlePhase.WaitingEarth =>
+                "enable Geospatial mode, check API auth, stay outdoors with clear sky",
+            _ => string.Empty,
+        };
+
+        if (!string.IsNullOrEmpty(qualityHint))
+        {
+            detail = string.IsNullOrEmpty(detail) ? qualityHint : detail + " | " + qualityHint;
+        }
+
+        if (to == VpsSettlePhase.Localized || to == VpsSettlePhase.Settling || to == VpsSettlePhase.Degraded)
+        {
+            LogAccuracySnapshot(to, pose, detail, periodic: false);
+            return;
+        }
+
+        Debug.Log($"[FAW] VPS: {from} -> {to}" + (string.IsNullOrEmpty(detail) ? "" : " | " + detail));
+    }
+
+    private void LogAccuracySnapshot(
+        VpsSettlePhase phase,
+        GeospatialPose? pose,
+        string detail,
+        bool periodic)
+    {
+        string prefix = periodic ? "[FAW] VPS (updating)" : "[FAW] VPS";
+        string poseLine = pose.HasValue
+            ? FormatAccuracy(pose.Value)
+            : "pose unavailable";
+
+        string tier = pose.HasValue ? AccuracyTierLabel(pose.Value.HorizontalAccuracy) : "";
 
         Debug.Log(
-            $"[FAW] AR Geospatial: Earth={earthLine} | ARSession.state={ARSession.state} notTracking={ARSession.notTrackingReason} " +
-            $"xrRunning={sessionSubsystemRunning} cam={cameraSubsystem} camBg={(_cameraBackground != null && _cameraBackground.enabled)}" +
-            perm);
+            $"{prefix}: {phase} {tier} | {poseLine}" +
+            (string.IsNullOrEmpty(detail) ? "" : " | " + detail));
+    }
+
+    private string AccuracyTierLabel(double horizontalAccuracyMeters)
+    {
+        if (horizontalAccuracyMeters <= horizontalExcellentThresholdMeters)
+        {
+            return "[excellent ≤" + horizontalExcellentThresholdMeters + "m]";
+        }
+
+        if (horizontalAccuracyMeters <= horizontalGoodThresholdMeters)
+        {
+            return "[good ≤" + horizontalGoodThresholdMeters + "m]";
+        }
+
+        if (horizontalAccuracyMeters <= horizontalLocalizedThresholdMeters)
+        {
+            return "[localized ≤" + horizontalLocalizedThresholdMeters + "m]";
+        }
+
+        return "[coarse >" + horizontalLocalizedThresholdMeters + "m]";
+    }
+
+    private static string FormatAccuracy(GeospatialPose p)
+    {
+        return $"horiz={p.HorizontalAccuracy:F1}m vert={p.VerticalAccuracy:F1}m " +
+            $"yaw={p.OrientationYawAccuracy:F1}° " +
+            $"lat={p.Latitude:F6} lon={p.Longitude:F6} alt={p.Altitude:F1}m";
+    }
+
+    private IEnumerator RunVpsCoverageChecks(GeospatialPose devicePose)
+    {
+        var points = new List<GeoPoint>
+        {
+            new GeoPoint
+            {
+                Label = "device (where you stand)",
+                Latitude = devicePose.Latitude,
+                Longitude = devicePose.Longitude,
+            },
+        };
+
+        ARGeospatialCreatorAnchor[] anchors = FindGeospatialCreatorAnchors();
+        foreach (ARGeospatialCreatorAnchor anchor in anchors)
+        {
+            if (double.IsNaN(anchor.Latitude) || double.IsNaN(anchor.Longitude))
+            {
+                Debug.LogWarning(
+                    $"[FAW] VPS coverage: anchor '{anchor.name}' has no lat/lon — skipped.");
+                continue;
+            }
+
+            points.Add(new GeoPoint
+            {
+                Label = "anchor '" + anchor.name + "'",
+                Latitude = anchor.Latitude,
+                Longitude = anchor.Longitude,
+            });
+        }
+
+        Debug.Log($"[FAW] VPS coverage: checking {points.Count} location(s)…");
+
+        foreach (GeoPoint point in points)
+        {
+            yield return QueryAndLogVpsCoverage(point);
+        }
+    }
+
+    private static ARGeospatialCreatorAnchor[] FindGeospatialCreatorAnchors()
+    {
+#if UNITY_2023_1_OR_NEWER
+        return Object.FindObjectsByType<ARGeospatialCreatorAnchor>(FindObjectsSortMode.None);
+#else
+        return Object.FindObjectsOfType<ARGeospatialCreatorAnchor>();
+#endif
+    }
+
+    private IEnumerator QueryAndLogVpsCoverage(GeoPoint point)
+    {
+        string key = point.Latitude.ToString("F5") + "," + point.Longitude.ToString("F5");
+        if (!_vpsQueriedKeys.Add(key))
+        {
+            yield break;
+        }
+
+        VpsAvailabilityPromise promise =
+            AREarthManager.CheckVpsAvailabilityAsync(point.Latitude, point.Longitude);
+
+        yield return promise;
+
+        Debug.Log(
+            $"[FAW] VPS coverage at {point.Label} ({point.Latitude:F5}, {point.Longitude:F5}): " +
+            FormatVpsCoverageVerdict(promise.Result));
+    }
+
+    private static string FormatVpsCoverageVerdict(VpsAvailability availability)
+    {
+        switch (availability)
+        {
+            case VpsAvailability.Available:
+                return "YES — VPS data exists here (Available)";
+            case VpsAvailability.Unavailable:
+                return "NO — no VPS coverage here (Unavailable); GPS-only may be weaker";
+            case VpsAvailability.Unknown:
+                return "UNKNOWN — query incomplete or session not ready";
+            case VpsAvailability.ErrorNotAuthorized:
+                return "ERROR — API not authorized (check ARCore / Geospatial API setup)";
+            case VpsAvailability.ErrorNetworkConnection:
+                return "ERROR — network (could not reach VPS check service)";
+            case VpsAvailability.ErrorResourceExhausted:
+                return "ERROR — quota / too many requests";
+            case VpsAvailability.ErrorInternal:
+                return "ERROR — internal (see logcat)";
+            default:
+                return availability.ToString();
+        }
     }
 }

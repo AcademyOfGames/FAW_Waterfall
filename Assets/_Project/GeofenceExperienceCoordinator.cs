@@ -26,7 +26,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     [SerializeField] private bool dontDestroyOnLoad = true;
     [SerializeField] private bool buildRuntimeUiIfMissing = true;
     [Tooltip("UnityEngine.Debug.Log — filter logcat with \"FAW\" for distance, scenes, START, scene transitions.")]
-    [SerializeField] private bool debugLogGeofence = true;
+    [SerializeField] private bool debugLogGeofence = false;
     [Tooltip("While GPS is valid, log nearest experience / distance at most this often (state changes still log immediately).")]
     [SerializeField] private float experienceFindLogSeconds = 10f;
     [Tooltip("While in geofence but scene is not ready, log why START is blocked on this interval.")]
