@@ -1361,8 +1361,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   audioSource: {fileID: 295548117}
-  useMicrophone: 0
-  microphoneDevice: 
 --- !u!1 &317583544
 GameObject:
   m_ObjectHideFlags: 0

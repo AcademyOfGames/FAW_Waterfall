@@ -8486,8 +8486,6 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   audioSource: {fileID: 1202897577}
-  useMicrophone: 0
-  microphoneDevice: 
 --- !u!4 &1202897579
 Transform:
   m_ObjectHideFlags: 0

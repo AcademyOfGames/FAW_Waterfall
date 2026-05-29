@@ -7,8 +7,6 @@ public class FrequencyAnalyzer : MonoBehaviour
 {
     [Header("Audio")]
     [SerializeField] private AudioSource audioSource;
-    [SerializeField] private bool useMicrophone;
-    [SerializeField] private string microphoneDevice;
 
     public float SubBass { get; private set; }
     public float Bass { get; private set; }
@@ -66,29 +64,12 @@ public class FrequencyAnalyzer : MonoBehaviour
         if (audioSource == null)
         {
             audioSource = gameObject.AddComponent<AudioSource>();
-            Debug.LogWarning("FrequencyAnalyzer: No AudioSource found. Added one. Assign a clip or enable Use Microphone.");
+            Debug.LogWarning("FrequencyAnalyzer: No AudioSource found. Added one — assign an audio clip on the AudioSource.");
         }
 
         _spectrumData = new float[SpectrumSize];
         _smoothedValues = new float[BandCount];
         _peakValues = new float[BandCount];
-
-        if (useMicrophone)
-        {
-            if (Microphone.devices.Length > 0)
-            {
-                string device = string.IsNullOrEmpty(microphoneDevice) ? Microphone.devices[0] : microphoneDevice;
-                int rate = AudioSettings.outputSampleRate;
-                audioSource.clip = Microphone.Start(device, true, 10, rate);
-                audioSource.loop = true;
-                while (Microphone.GetPosition(device) <= 0) { }
-                audioSource.Play();
-            }
-            else
-            {
-                Debug.LogError("FrequencyAnalyzer: No microphone found.");
-            }
-        }
     }
 
     private void Update()

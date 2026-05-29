@@ -1,5 +1,5 @@
 fileFormatVersion: 2
-guid: eecb011bb76316f438e3d031ebd6c1fc
+guid: 3479af45f2568a04484fa06b2be1812b
 ModelImporter:
   serializedVersion: 22200
   internalIDToNameTable: []
@@ -7,28 +7,8 @@ ModelImporter:
   - first:
       type: UnityEngine:Material
       assembly: UnityEngine.CoreModule
-      name: Blanket
-    second: {fileID: 2100000, guid: 68d52cdc6cc0244488fbf5923d21685b, type: 2}
-  - first:
-      type: UnityEngine:Material
-      assembly: UnityEngine.CoreModule
-      name: Drum
-    second: {fileID: 2100000, guid: 36b802201b8c63e45b3cf6ee6d688770, type: 2}
-  - first:
-      type: UnityEngine:Material
-      assembly: UnityEngine.CoreModule
-      name: DrumStick
-    second: {fileID: 2100000, guid: 2d87bccc1bedfc349ae3e8244f0e78b4, type: 2}
-  - first:
-      type: UnityEngine:Material
-      assembly: UnityEngine.CoreModule
-      name: Hat
-    second: {fileID: 2100000, guid: 69209e7fd5f0a5048ae9ea387db44e3a, type: 2}
-  - first:
-      type: UnityEngine:Material
-      assembly: UnityEngine.CoreModule
-      name: spiritBody
-    second: {fileID: 2100000, guid: 07dd9b0a100f82d48a12c0908d43eda1, type: 2}
+      name: tripo_mat_0a8629e2
+    second: {fileID: 2100000, guid: 23d4612c76bdf2a4e9ef288348db8457, type: 2}
   materials:
     materialImportMode: 2
     materialName: 0
