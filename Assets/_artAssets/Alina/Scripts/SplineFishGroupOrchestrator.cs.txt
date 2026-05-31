@@ -1,0 +1,147 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+/// <summary>
+/// Alternates two groups of path followers: group A runs, shrinks out, group B runs, shrinks out, repeat.
+/// </summary>
+public class SplineFishGroupOrchestrator : MonoBehaviour
+{
+    [Header("Groups")]
+    [SerializeField] private List<VertexPathSwarmFollower> groupA = new List<VertexPathSwarmFollower>();
+    [SerializeField] private List<VertexPathSwarmFollower> groupB = new List<VertexPathSwarmFollower>();
+
+    [Header("Timing")]
+    [Tooltip("How long each group swims before shrinking away.")]
+    [SerializeField] private float activeDurationSeconds = 6f;
+    [Tooltip("How long the active group shrinks before the next group starts.")]
+    [SerializeField] private float shrinkDurationSeconds = 1f;
+    [Tooltip("Stagger passed to each swarm when it starts.")]
+    [SerializeField] private float activateStaggerSeconds;
+
+    [Header("Startup")]
+    [Tooltip("Disable Activate On Play on each VertexPathSwarmFollower when using this orchestrator.")]
+    [SerializeField] private bool startOnPlay = true;
+
+    private Coroutine _loopRoutine;
+
+    private void OnValidate()
+    {
+        activeDurationSeconds = Mathf.Max(0f, activeDurationSeconds);
+        shrinkDurationSeconds = Mathf.Max(0.01f, shrinkDurationSeconds);
+        activateStaggerSeconds = Mathf.Max(0f, activateStaggerSeconds);
+    }
+
+    private void Start()
+    {
+        StopAllGroupsImmediate();
+
+        if (startOnPlay)
+        {
+            StartLoop();
+        }
+    }
+
+    public void StartLoop()
+    {
+        if (_loopRoutine != null)
+        {
+            StopCoroutine(_loopRoutine);
+        }
+
+        _loopRoutine = StartCoroutine(LoopGroupsRoutine());
+    }
+
+    public void StopLoop()
+    {
+        if (_loopRoutine != null)
+        {
+            StopCoroutine(_loopRoutine);
+            _loopRoutine = null;
+        }
+
+        StopAllGroupsImmediate();
+    }
+
+    private IEnumerator LoopGroupsRoutine()
+    {
+        while (true)
+        {
+            yield return RunGroup(groupA);
+            yield return ShrinkGroup(groupA);
+            yield return RunGroup(groupB);
+            yield return ShrinkGroup(groupB);
+        }
+    }
+
+    private IEnumerator RunGroup(List<VertexPathSwarmFollower> group)
+    {
+        StartGroup(group);
+
+        if (activeDurationSeconds > 0f)
+        {
+            yield return new WaitForSeconds(activeDurationSeconds);
+        }
+    }
+
+    private void StartGroup(List<VertexPathSwarmFollower> group)
+    {
+        for (int i = 0; i < group.Count; i++)
+        {
+            VertexPathSwarmFollower swarm = group[i];
+            if (swarm != null)
+            {
+                swarm.BeginSwarm(activateStaggerSeconds);
+            }
+        }
+    }
+
+    private IEnumerator ShrinkGroup(List<VertexPathSwarmFollower> group)
+    {
+        int pending = 0;
+
+        for (int i = 0; i < group.Count; i++)
+        {
+            VertexPathSwarmFollower swarm = group[i];
+            if (swarm == null)
+            {
+                continue;
+            }
+
+            pending++;
+            StartCoroutine(ShrinkSwarmAndSignal(swarm, shrinkDurationSeconds, () => pending--));
+        }
+
+        while (pending > 0)
+        {
+            yield return null;
+        }
+    }
+
+    private IEnumerator ShrinkSwarmAndSignal(
+        VertexPathSwarmFollower swarm,
+        float duration,
+        System.Action onComplete)
+    {
+        yield return swarm.ShrinkAndStopSwarm(duration);
+        onComplete?.Invoke();
+    }
+
+    private void StopAllGroupsImmediate()
+    {
+        StopGroup(groupA);
+        StopGroup(groupB);
+    }
+
+    private static void StopGroup(List<VertexPathSwarmFollower> group)
+    {
+        for (int i = 0; i < group.Count; i++)
+        {
+            VertexPathSwarmFollower swarm = group[i];
+            if (swarm != null)
+            {
+                swarm.StopSwarmImmediate();
+            }
+        }
+    }
+}

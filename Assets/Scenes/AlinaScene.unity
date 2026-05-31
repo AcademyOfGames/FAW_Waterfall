@@ -299,7 +299,7 @@ PrefabInstance:
     - target: {fileID: 2620481142598289264, guid: 4316137055aff4c47ac1ddc2c451bb96,
         type: 3}
       propertyPath: m_LocalPosition.x
-      value: 0
+      value: 6.9849193e-10
       objectReference: {fileID: 0}
     - target: {fileID: 2620481142598289264, guid: 4316137055aff4c47ac1ddc2c451bb96,
         type: 3}
@@ -953,15 +953,79 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3128234350489459806, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: pathSpeed
+      value: 12
+      objectReference: {fileID: 0}
+    - target: {fileID: 3128234350489459806, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: turnSpeed
+      value: 20
+      objectReference: {fileID: 0}
+    - target: {fileID: 3128234350489459806, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: tubeRadius
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 3128234350489459806, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: fishSpacing
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3128234350489459806, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: maxFishCount
+      value: 400
+      objectReference: {fileID: 0}
+    - target: {fileID: 3128234350489459806, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: maxFishScale
+      value: 5
+      objectReference: {fileID: 0}
+    - target: {fileID: 3128234350489459806, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: minFishScale
+      value: 3
+      objectReference: {fileID: 0}
+    - target: {fileID: 3128234350489459806, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: spawnMaxInterval
+      value: 0.001
+      objectReference: {fileID: 0}
+    - target: {fileID: 3128234350489459806, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: spawnMinInterval
+      value: 0.001
+      objectReference: {fileID: 0}
+    - target: {fileID: 3128234350489459806, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: fishScaleCycleSeconds
+      value: 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 3866114128200141907, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: m_LocalPosition.y
+      value: -0.77
+      objectReference: {fileID: 0}
     - target: {fileID: 5432092802435755448, guid: 773d8ba246452804abaabb4ae0850593,
         type: 3}
       propertyPath: m_Name
       value: Alina_MainPrefab
       objectReference: {fileID: 0}
+    - target: {fileID: 9173025490513208223, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      propertyPath: speed
+      value: 15
+      objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 7728576978479133003, guid: 773d8ba246452804abaabb4ae0850593,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1726873473}
   m_SourcePrefab: {fileID: 100100000, guid: 773d8ba246452804abaabb4ae0850593, type: 3}
 --- !u!4 &799202874 stripped
 Transform:
@@ -1694,6 +1758,31 @@ MonoBehaviour:
   m_EnvironmentDepthMode: 2
   m_EnvironmentDepthTemporalSmoothing: 1
   m_OcclusionPreferenceMode: 0
+--- !u!1 &1726873470 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 7728576978479133003, guid: 773d8ba246452804abaabb4ae0850593,
+    type: 3}
+  m_PrefabInstance: {fileID: 799202873}
+  m_PrefabAsset: {fileID: 0}
+--- !u!114 &1726873473
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1726873470}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 4707b2de21644844eabf1ae2ce2d6ae8, type: 3}
+  m_Name: 
+  m_EditorClassIdentifier: 
+  groupA:
+  - {fileID: 0}
+  groupB: []
+  activeDurationSeconds: 6
+  shrinkDurationSeconds: 1
+  activateStaggerSeconds: 0
+  startOnPlay: 1
 --- !u!1660057539 &9223372036854775807
 SceneRoots:
   m_ObjectHideFlags: 0
