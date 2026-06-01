@@ -4,8 +4,8 @@ using UnityEngine;
 using UnityEngine.Events;
 
 /// <summary>
-/// Sequences two VPSF groups: A starts on its own schedule, swims for a configured duration,
-/// shrinks, then B is released to start on its own schedule, swims, shrinks, done.
+/// Sequences two VPSF groups: A starts, swims, shrinks, then B starts, swims, shrinks.
+/// By default this repeats forever (B -> A -> B -> ...).
 /// Start timing (delay, stagger) lives on each VertexPathSwarmFollower.
 /// </summary>
 public class SplineFishGroupOrchestrator : MonoBehaviour
@@ -27,11 +27,15 @@ public class SplineFishGroupOrchestrator : MonoBehaviour
     [SerializeField] private float groupBShrinkDurationSeconds = 1f;
 
     [Header("Startup")]
-    [Tooltip("When on, begins monitoring group A on Play. Group A VPSFs should use Activate On Play; group B should not.")]
-    [SerializeField] private bool startOnPlay = true;
+    [Tooltip("When on, begins the A->B sequence on Play. Leave off when RandomOneAtATimeActivator (or another trigger) calls StartSequence().")]
+    [SerializeField] private bool startOnPlay;
+
+    [Header("Looping")]
+    [Tooltip("When on, after group B shrinks the sequence returns to group A and repeats forever.")]
+    [SerializeField] private bool loopForever = true;
 
     [Header("Events")]
-    [Tooltip("Invoked after group B finishes shrinking and the sequence is complete.")]
+    [Tooltip("Invoked after each full A->B cycle (or once at completion if looping is off).")]
     [SerializeField] private UnityEvent onSequenceComplete;
 
     private Coroutine _sequenceRoutine;
@@ -49,6 +53,11 @@ public class SplineFishGroupOrchestrator : MonoBehaviour
     private void Start()
     {
         PrepareGroupForSequence(groupB);
+
+        if (!startOnPlay)
+        {
+            PrepareGroupForSequence(groupA);
+        }
 
         if (startOnPlay)
         {
@@ -91,11 +100,20 @@ public class SplineFishGroupOrchestrator : MonoBehaviour
 
     private IEnumerator PlaySequenceRoutine()
     {
-        yield return RunGroupPhase(groupA, groupAActiveDurationSeconds, groupAShrinkDurationSeconds, releaseGroup: false);
-        yield return RunGroupPhase(groupB, groupBActiveDurationSeconds, groupBShrinkDurationSeconds, releaseGroup: true);
+        while (true)
+        {
+            yield return RunGroupPhase(groupA, groupAActiveDurationSeconds, groupAShrinkDurationSeconds, releaseGroup: true);
+            yield return RunGroupPhase(groupB, groupBActiveDurationSeconds, groupBShrinkDurationSeconds, releaseGroup: true);
+
+            onSequenceComplete?.Invoke();
+
+            if (!loopForever)
+            {
+                break;
+            }
+        }
 
         _sequenceRoutine = null;
-        onSequenceComplete?.Invoke();
     }
 
     private IEnumerator RunGroupPhase(

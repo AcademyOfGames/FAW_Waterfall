@@ -35,11 +35,12 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     [SerializeField] private Color nearestExperienceNameColor = new Color32(0x2E, 0x8B, 0xFF, 0xFF);
 
     [Header("Debug / testing — force geofence")]
-    [Tooltip("Pretend GPS is at this experience's lat/lon. If more than one is checked, the first in list order below wins (Benaroya → Alina → Sample → Chenoa → Dan).")]
+    [Tooltip("Pretend GPS is at this experience's lat/lon. If more than one is checked, the first in list order below wins (Benaroya → Alina → Divine → Chenoa → Dan).")]
     [SerializeField] private bool forceBenaroyaGeofence;
     [FormerlySerializedAs("forceAtAlinaGeofence")]
     [SerializeField] private bool forceAlinaGeofence;
-    [SerializeField] private bool forceSampleSceneGeofence;
+    [FormerlySerializedAs("forceSampleSceneGeofence")]
+    [SerializeField] private bool forceDivineSceneGeofence;
     [SerializeField] private bool forceChenoaGeofence;
     [SerializeField] private bool forceDanGeofence;
     [Tooltip("When runtime HUD is built, add on-screen toggles for force-geofence overrides.")]
@@ -554,7 +555,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     }
 
     private bool AnyForceGeofenceEnabled =>
-        forceBenaroyaGeofence || forceAlinaGeofence || forceSampleSceneGeofence ||
+        forceBenaroyaGeofence || forceAlinaGeofence || forceDivineSceneGeofence ||
         forceChenoaGeofence || forceDanGeofence;
 
     private bool TryGetForcedGeofence(out ExperienceGeofenceDefinition definition)
@@ -586,7 +587,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
             {
                 "benaroyaScene" => forceBenaroyaGeofence,
                 "AlinaScene" => forceAlinaGeofence,
-                "SampleScene" => forceSampleSceneGeofence,
+                "DivineScene" => forceDivineSceneGeofence,
                 "ChenoaScene" => forceChenoaGeofence,
                 "DanScene" => forceDanGeofence,
                 _ => false
@@ -616,9 +617,9 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
                     if (forceAlinaGeofence == value) return false;
                     forceAlinaGeofence = value;
                     return true;
-                case "SampleScene":
-                    if (forceSampleSceneGeofence == value) return false;
-                    forceSampleSceneGeofence = value;
+                case "DivineScene":
+                    if (forceDivineSceneGeofence == value) return false;
+                    forceDivineSceneGeofence = value;
                     return true;
                 case "ChenoaScene":
                     if (forceChenoaGeofence == value) return false;

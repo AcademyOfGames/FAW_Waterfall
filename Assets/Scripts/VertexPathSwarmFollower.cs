@@ -10,6 +10,16 @@ using UnityEngine.Events;
 /// </summary>
 public class VertexPathSwarmFollower : MonoBehaviour
 {
+    private enum ModelForwardAxis
+    {
+        PositiveX,
+        NegativeX,
+        PositiveY,
+        NegativeY,
+        PositiveZ,
+        NegativeZ
+    }
+
     private class FollowerState
     {
         public int SlotIndex;
@@ -55,8 +65,10 @@ public class VertexPathSwarmFollower : MonoBehaviour
     [SerializeField] private float fishScaleCycleSeconds = 2f;
 
     [Header("Orientation")]
-    [Tooltip("Extra Euler rotation after aligning to the path tangent. Default -90 X maps a Y-up fish mesh to face forward.")]
-    [SerializeField] private Vector3 rotationOffsetEuler = new Vector3(-90f, 0f, 0f);
+    [Tooltip("Which local axis points out of the fish nose in the source mesh/prefab. Default +X is an estimate for this fish setup.")]
+    [SerializeField] private ModelForwardAxis modelForwardAxis = ModelForwardAxis.PositiveX;
+    [Tooltip("Extra Euler rotation after aligning to the path tangent and model-axis correction.")]
+    [SerializeField] private Vector3 rotationOffsetEuler = Vector3.zero;
 
     [Header("Spawning")]
     [SerializeField] private GameObject followerPrefab;
@@ -561,13 +573,40 @@ public class VertexPathSwarmFollower : MonoBehaviour
 
     private Quaternion GetFollowerRotation(Vector3 tangent, Vector3 pathUp)
     {
+        Quaternion modelAxisCorrection = Quaternion.FromToRotation(
+            GetModelForwardAxisVector(modelForwardAxis),
+            Vector3.forward
+        );
+        Quaternion extraOffset = Quaternion.Euler(rotationOffsetEuler);
+
         if (tangent.sqrMagnitude <= 0.0001f)
         {
-            return Quaternion.Euler(rotationOffsetEuler);
+            return modelAxisCorrection * extraOffset;
         }
 
         Vector3 upDirection = pathUp.sqrMagnitude > 0.0001f ? pathUp : Vector3.up;
-        return Quaternion.LookRotation(tangent, upDirection) * Quaternion.Euler(rotationOffsetEuler);
+        return Quaternion.LookRotation(tangent, upDirection) * modelAxisCorrection * extraOffset;
+    }
+
+    private static Vector3 GetModelForwardAxisVector(ModelForwardAxis axis)
+    {
+        switch (axis)
+        {
+            case ModelForwardAxis.PositiveX:
+                return Vector3.right;
+            case ModelForwardAxis.NegativeX:
+                return Vector3.left;
+            case ModelForwardAxis.PositiveY:
+                return Vector3.up;
+            case ModelForwardAxis.NegativeY:
+                return Vector3.down;
+            case ModelForwardAxis.PositiveZ:
+                return Vector3.forward;
+            case ModelForwardAxis.NegativeZ:
+                return Vector3.back;
+            default:
+                return Vector3.forward;
+        }
     }
 
     private void InitializeFollowerScale(Transform follower, FollowerState state)
