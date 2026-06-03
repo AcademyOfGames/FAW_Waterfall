@@ -1,3 +1,4 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine.Serialization;
@@ -51,6 +52,10 @@ public class ARSessionCameraDebugLog : MonoBehaviour
     [Tooltip("Query Google VPS coverage at the device and at each Geospatial Creator anchor in the scene.")]
     private bool checkVpsAvailability = true;
 
+    [SerializeField]
+    [Tooltip("While localized, log GPS + Unity distance from camera to each Geospatial Creator anchor.")]
+    private bool logAnchorDistance = true;
+
     private AREarthManager _earthManager;
     private ARSession _session;
 
@@ -58,6 +63,7 @@ public class ARSessionCameraDebugLog : MonoBehaviour
     private ARSessionState _lastSessionState = ARSessionState.None;
     private float _nextPeriodicLogTime;
     private bool _vpsCoverageChecksStarted;
+    private bool _anchorDistanceLoggedOnce;
     private readonly HashSet<string> _vpsQueriedKeys = new HashSet<string>();
 
     /// <summary>True when Earth is tracking and horizontal accuracy is within the localized threshold.</summary>
@@ -144,6 +150,15 @@ public class ARSessionCameraDebugLog : MonoBehaviour
         {
             _vpsCoverageChecksStarted = true;
             StartCoroutine(RunVpsCoverageChecks(pose.Value));
+        }
+
+        if (logAnchorDistance
+            && pose.HasValue
+            && newPhase == VpsSettlePhase.Localized
+            && !_anchorDistanceLoggedOnce)
+        {
+            _anchorDistanceLoggedOnce = true;
+            LogAnchorDistances(pose.Value);
         }
     }
 
@@ -296,6 +311,56 @@ public class ARSessionCameraDebugLog : MonoBehaviour
         return $"horiz={p.HorizontalAccuracy:F1}m vert={p.VerticalAccuracy:F1}m " +
             $"yaw={p.OrientationYawAccuracy:F1}° " +
             $"lat={p.Latitude:F6} lon={p.Longitude:F6} alt={p.Altitude:F1}m";
+    }
+
+    private static void LogAnchorDistances(GeospatialPose devicePose)
+    {
+        ARGeospatialCreatorAnchor[] anchors = FindGeospatialCreatorAnchors();
+        if (anchors.Length == 0)
+        {
+            Debug.LogWarning("[FAW] VPS: no Geospatial Creator anchors in scene — content may not be earth-anchored.");
+            return;
+        }
+
+        Camera cam = Camera.main;
+        foreach (ARGeospatialCreatorAnchor anchor in anchors)
+        {
+            if (double.IsNaN(anchor.Latitude) || double.IsNaN(anchor.Longitude))
+            {
+                Debug.LogWarning($"[FAW] Anchor '{anchor.name}' has no lat/lon.");
+                continue;
+            }
+
+            double gpsM = HaversineMeters(
+                devicePose.Latitude,
+                devicePose.Longitude,
+                anchor.Latitude,
+                anchor.Longitude);
+
+            string worldLine = "world dist n/a (anchor not resolved yet)";
+            if (cam != null)
+            {
+                float worldM = Vector3.Distance(cam.transform.position, anchor.transform.position);
+                worldLine = $"world dist={worldM:F1}m (camera ↔ anchor transform)";
+            }
+
+            Debug.Log(
+                $"[FAW] Anchor placement '{anchor.name}' ({anchor.AltitudeType}): " +
+                $"anchor lat/lon=({anchor.Latitude:F5}, {anchor.Longitude:F5}) | " +
+                $"GPS dist from you={gpsM:F0}m (not the horiz= accuracy line) | {worldLine}");
+        }
+    }
+
+    private static double HaversineMeters(double lat1, double lon1, double lat2, double lon2)
+    {
+        const double earthRadiusM = 6371000.0;
+        var dLat = (lat2 - lat1) * (Math.PI / 180.0);
+        var dLon = (lon2 - lon1) * (Math.PI / 180.0);
+        var a = Math.Sin(dLat / 2.0) * Math.Sin(dLat / 2.0) +
+                Math.Cos(lat1 * (Math.PI / 180.0)) * Math.Cos(lat2 * (Math.PI / 180.0)) *
+                Math.Sin(dLon / 2.0) * Math.Sin(dLon / 2.0);
+        var c = 2.0 * Math.Atan2(Math.Sqrt(a), Math.Sqrt(1.0 - a));
+        return earthRadiusM * c;
     }
 
     private IEnumerator RunVpsCoverageChecks(GeospatialPose devicePose)
