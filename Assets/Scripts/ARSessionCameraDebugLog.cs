@@ -404,9 +404,9 @@ public class ARSessionCameraDebugLog : MonoBehaviour
     private static ARGeospatialCreatorAnchor[] FindGeospatialCreatorAnchors()
     {
 #if UNITY_2023_1_OR_NEWER
-        return Object.FindObjectsByType<ARGeospatialCreatorAnchor>(FindObjectsSortMode.None);
+        return UnityEngine.Object.FindObjectsByType<ARGeospatialCreatorAnchor>(FindObjectsSortMode.None);
 #else
-        return Object.FindObjectsOfType<ARGeospatialCreatorAnchor>();
+        return UnityEngine.Object.FindObjectsOfType<ARGeospatialCreatorAnchor>();
 #endif
     }
 
