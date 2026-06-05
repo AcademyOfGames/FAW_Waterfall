@@ -107,8 +107,8 @@ public static class GeofenceRuntimeUiBuilder
 
     private static string ForceGeofenceToggleLabel(ExperienceGeofenceDefinition def)
     {
-        if (string.Equals(def.SceneName, "SampleScene", System.StringComparison.Ordinal))
-            return "Simulate at Sample Scene (Divine)";
+        if (string.Equals(def.SceneName, "DivineScene", System.StringComparison.Ordinal))
+            return "Simulate at Divine";
         return $"Simulate at {def.ExperienceName}";
     }
 

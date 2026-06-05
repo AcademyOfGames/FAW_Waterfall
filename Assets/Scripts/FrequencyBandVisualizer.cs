@@ -78,11 +78,29 @@ public class FrequencyBandVisualizer : MonoBehaviour
     [Tooltip("Used only when Blend Shape Timeline is disabled. Blend weight hits 0 when the smoothed scale multiplier reaches this (same scale as maxScale).")]
     [SerializeField] private float blendWeightZeroAtMul = 3f;
 
+    [Header("Glow material & lights")]
+    [Tooltip("Renderer using a transparent Universal Unlit material — _BaseColor alpha is driven by song amplitude.")]
+    [SerializeField] private Renderer glowRenderer;
+    [Tooltip("When glow begins (seconds), on the same clock as timed scale-in.")]
+    [SerializeField] private float glowStartTimeSeconds = 30f;
+    [Tooltip("Seconds to lerp from no glow to full amplitude-driven glow.")]
+    [SerializeField] private float glowRampDurationSeconds = 4f;
+    [Tooltip("Song amplitude at or below this → fully transparent glow / baseline light intensity.")]
+    [SerializeField] private float amplitudeTransparentAt = 0.4f;
+    [Tooltip("Song amplitude at or above this → full opaque glow / authored light intensity.")]
+    [SerializeField] private float amplitudeOpaqueAt = 1f;
+    [Tooltip("Minimum light intensity as a fraction of each light's authored intensity (always on once the glow timeline is active).")]
+    [Range(0f, 1f)]
+    [SerializeField] private float lightBaselineIntensityFraction = 0.4f;
+    [Tooltip("Up to three lights — baseline intensity plus amplitude-driven boost, scaled by the glow timeline.")]
+    [SerializeField] private List<Light> glowLights = new List<Light>(3);
+
     [Header("Debug")]
     [Tooltip("Logs blend-shape clock, weights, skin collection, and analyzer issues (throttled in Update).")]
     [SerializeField] private bool blendShapeDebugLogging;
 
     private const int BandCount = 6;
+    private static readonly int GlowBaseColorId = Shader.PropertyToID("_BaseColor");
     private List<GameObject>[] _bands;
     private List<Vector3>[] _initialScales;
     private List<SkinnedMeshRenderer>[] _bandSkinMeshes;
@@ -100,6 +118,10 @@ public class FrequencyBandVisualizer : MonoBehaviour
 
     private float _nextBlendDebugLogUnscaledTime;
     private bool _blendDebugLoggedNullAnalyzer;
+
+    private Color _glowMaterialBaseColor;
+    private Material _glowMaterialInstance;
+    private float[] _glowLightBaseIntensities;
 
     private void OnEnable()
     {
@@ -174,7 +196,25 @@ public class FrequencyBandVisualizer : MonoBehaviour
         }
 
         ApplyInitialBlendShapeWeightsForTimeline();
+        CacheGlowAndLightBaselines();
         LogBlendShapeAwakeSummary();
+    }
+
+    private void CacheGlowAndLightBaselines()
+    {
+        if (glowRenderer != null)
+        {
+            _glowMaterialInstance = glowRenderer.material;
+            _glowMaterialBaseColor = _glowMaterialInstance.GetColor(GlowBaseColorId);
+        }
+
+        int lightCount = glowLights != null ? glowLights.Count : 0;
+        _glowLightBaseIntensities = new float[lightCount];
+        for (int i = 0; i < lightCount; i++)
+        {
+            Light light = glowLights[i];
+            _glowLightBaseIntensities[i] = light != null ? light.intensity : 0f;
+        }
     }
 
     private void LogBlendShapeAwakeSummary()
@@ -259,6 +299,9 @@ public class FrequencyBandVisualizer : MonoBehaviour
         float clock = GetTimedScaleClockSeconds();
         FillTimedScaleInFactorMap(clock);
         ApplyTimedScaleInGroupsOnlyForNonBandObjects(clock);
+
+        float songAmplitude = frequencyAnalyzer != null ? GetSongAmplitude() : 0f;
+        ApplyGlowAndLights(clock, songAmplitude);
 
         if (frequencyAnalyzer == null)
         {
@@ -348,6 +391,58 @@ public class FrequencyBandVisualizer : MonoBehaviour
                     $"[FrequencyBandVisualizer] Blend (band 0): driveBlendShapes={driveBlendShapes}, skinCount={_bandSkinMeshes[i].Count} — no writes this band.",
                     this);
             }
+        }
+    }
+
+    private float GetSongAmplitude()
+    {
+        float sum = 0f;
+        for (int i = 0; i < BandCount; i++)
+            sum += frequencyAnalyzer.GetBandValue((FrequencyAnalyzer.FrequencyBand)i);
+        return sum / BandCount;
+    }
+
+    private float GetGlowTimelineRamp01(float clockSeconds)
+    {
+        if (clockSeconds < glowStartTimeSeconds)
+            return 0f;
+        if (glowRampDurationSeconds <= 0f)
+            return 1f;
+        return Mathf.Clamp01((clockSeconds - glowStartTimeSeconds) / glowRampDurationSeconds);
+    }
+
+    private float GetAmplitudeDrive01(float amplitude)
+    {
+        if (amplitudeOpaqueAt <= amplitudeTransparentAt)
+            return amplitude >= amplitudeOpaqueAt ? 1f : 0f;
+        return Mathf.Clamp01(Mathf.InverseLerp(amplitudeTransparentAt, amplitudeOpaqueAt, amplitude));
+    }
+
+    private void ApplyGlowAndLights(float clockSeconds, float songAmplitude)
+    {
+        float timelineRamp = GetGlowTimelineRamp01(clockSeconds);
+        float amplitudeDrive = GetAmplitudeDrive01(songAmplitude);
+        float glowDrive = timelineRamp * amplitudeDrive;
+        float baseline = Mathf.Clamp01(lightBaselineIntensityFraction);
+        float lightDrive = timelineRamp * (baseline + (1f - baseline) * amplitudeDrive);
+
+        if (_glowMaterialInstance != null)
+        {
+            Color c = _glowMaterialBaseColor;
+            c.a = _glowMaterialBaseColor.a * glowDrive;
+            _glowMaterialInstance.SetColor(GlowBaseColorId, c);
+        }
+
+        if (glowLights == null || _glowLightBaseIntensities == null)
+            return;
+
+        int count = Mathf.Min(glowLights.Count, _glowLightBaseIntensities.Length);
+        for (int i = 0; i < count; i++)
+        {
+            Light light = glowLights[i];
+            if (light == null)
+                continue;
+            light.intensity = _glowLightBaseIntensities[i] * lightDrive;
         }
     }
 

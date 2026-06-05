@@ -1,201 +1,207 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
+using BezierSolution;
 using UnityEngine;
+using UnityEngine.Events;
 
 /// <summary>
-/// Swarm followers with boids, per-fish speed variation, occasional straying,
-/// and a few camera-curious fish that watch or flee from the main camera.
+/// Fish ride a bezier spline as a conveyor belt: each fish owns a spline parameter
+/// and advances by the same arc-length every frame.
 /// </summary>
 public class VertexPathSwarmFollower : MonoBehaviour
 {
-    private enum FollowerMode
+    private enum ModelForwardAxis
     {
-        Following,
-        Straying,
-        SeekingCamera,
-        WatchingCamera,
-        EscapingCamera
+        PositiveX,
+        NegativeX,
+        PositiveY,
+        NegativeY,
+        PositiveZ,
+        NegativeZ
     }
 
     private class FollowerState
     {
-        public float MaxSpeed;
-        public FollowerMode Mode;
-        public float ModeEndTime;
-        public float NextBehaviorRollTime;
-        public Vector3 StrayOffset;
-        public bool IsCameraCurious;
-        public float SwayPhase;
-        public float FormationBehind;
-        public float FormationLateral;
-        public float FormationVertical;
+        public int SlotIndex;
+        public float NormalizedT;
+        public float TubeAngle;
+        public float TubeRadius;
+        public float WobblePhase;
+        public float WobbleSpeed;
+        public float ScalePhase;
+        public Vector3 BaseLocalScale;
+        public bool HasBaseScale;
     }
 
+    private const int PathSampleAccuracy = 12;
+
     [SerializeField] private List<Transform> followers = new List<Transform>();
-    [SerializeField] private Transform target;
-    [SerializeField] private float followSmoothTime = 0.35f;
-    [SerializeField] private float followSpeed = 20f;
-    [SerializeField] private float turnSpeed = 6f;
+    [SerializeField] private BezierSpline spline;
 
-    [Header("Speed Variation")]
-    [SerializeField] private float minSpeedMultiplier = 0.65f;
-    [SerializeField] private float maxSpeedMultiplier = 1.35f;
+    [Header("Path")]
+    [SerializeField] private TravelMode travelMode = TravelMode.Loop;
+    [SerializeField] private float pathSpeed = 12f;
+    [Range(0f, 1f)]
+    [SerializeField] private float startNormalizedT;
 
-    [Header("Stray")]
-    [SerializeField] private float strayOffsetDistance = 4f;
-    [SerializeField] private float strayMinDuration = 2f;
-    [SerializeField] private float strayMaxDuration = 6f;
-    [SerializeField] private float strayChance = 0.35f;
-    [SerializeField] private float behaviorRollMinInterval = 4f;
-    [SerializeField] private float behaviorRollMaxInterval = 12f;
+    [Header("Tube Trail")]
+    [Tooltip("Arc-length gap between the convoy front and the first fish.")]
+    [SerializeField] private float headGap = 0.4f;
+    [Tooltip("Fixed arc-length spacing assigned when each fish is created.")]
+    [SerializeField] private float fishSpacing = 1f;
+    [Tooltip("Maximum radial offset from the path centerline.")]
+    [SerializeField] private float tubeRadius = 2f;
+    [Range(0f, 1f)]
+    [SerializeField] private float tubeRadiusVariation = 0.75f;
+    [SerializeField] private float tubeWobbleAmplitude = 0.06f;
+    [SerializeField] private float tubeWobbleSpeed = 1.4f;
 
-    [Header("Camera Curious")]
-    [SerializeField] private int minCameraCuriousCount = 2;
-    [SerializeField] private int maxCameraCuriousCount = 5;
-    [SerializeField] private float cameraSeekChance = 0.4f;
-    [SerializeField] private float cameraWatchDistance = 2.5f;
-    [SerializeField] private float cameraArriveDistance = 0.6f;
-    [SerializeField] private float cameraWatchMinDuration = 3f;
-    [SerializeField] private float cameraWatchMaxDuration = 8f;
-    [SerializeField] private float cameraSeekMaxDuration = 15f;
-    [SerializeField] private float cameraTooCloseDistance = 1.2f;
-    [SerializeField] private float cameraSafeDistance = 2.5f;
-    [SerializeField] private float escapeSpeed = 35f;
-    [SerializeField] private float escapeFleeDistance = 4f;
-    [SerializeField] private float cameraLookTurnSpeed = 8f;
+    [Header("Fish Scale")]
+    [Tooltip("Minimum uniform scale multiplier applied to each fish.")]
+    [SerializeField] private float minFishScale = 3f;
+    [Tooltip("Maximum uniform scale multiplier applied to each fish.")]
+    [SerializeField] private float maxFishScale = 5f;
+    [Tooltip("Seconds for one full pulse cycle (min → max → min).")]
+    [SerializeField] private float fishScaleCycleSeconds = 2f;
 
-    [Header("Sway")]
-    [SerializeField] private float swayAmplitude = 0.15f;
-    [SerializeField] private float swaySpeed = 1.2f;
+    [Header("Orientation")]
+    [Tooltip("Which local axis points out of the fish nose in the source mesh/prefab. Default +X is an estimate for this fish setup.")]
+    [SerializeField] private ModelForwardAxis modelForwardAxis = ModelForwardAxis.PositiveX;
+    [Tooltip("Extra Euler rotation after aligning to the path tangent and model-axis correction.")]
+    [SerializeField] private Vector3 rotationOffsetEuler = Vector3.zero;
 
     [Header("Spawning")]
     [SerializeField] private GameObject followerPrefab;
-    [SerializeField] private int maxFishCount = 40;
-    [SerializeField] private float spawnDistance = 2f;
-    [SerializeField] private float spawnMinInterval = 8f;
-    [SerializeField] private float spawnMaxInterval = 20f;
+    [SerializeField] private int maxFishCount = 400;
+    [SerializeField] private float spawnMinInterval = 0.001f;
+    [SerializeField] private float spawnMaxInterval = 0.001f;
     [SerializeField] private Transform spawnParent;
 
-    [Header("Formation (Gaussian Trail)")]
-    [Tooltip("Peak distance behind the target where most fish aim to swim.")]
-    [SerializeField] private float formationMeanBehind = 3.5f;
-    [SerializeField] private float formationStdBehind = 2f;
-    [SerializeField] private float formationStdLateral = 1.4f;
-    [SerializeField] private float formationStdVertical = 0.35f;
-    [SerializeField] private float formationMinBehind = 0.75f;
-    [SerializeField] private float formationMaxBehind = 14f;
-    [Range(0f, 1f)]
-    [SerializeField] private float formationCohesionScale = 0.35f;
+    [Header("Activation")]
+    [Tooltip("When on, this swarm starts itself on Play using the delay and stagger below. When off, call RequestStart() or use SplineFishGroupOrchestrator to release group B.")]
+    [SerializeField] private bool activateOnPlay = true;
+    [Tooltip("Seconds to wait before the swarm starts (after Play or after RequestStart()).")]
+    [SerializeField] private float activateDelaySeconds;
+    [Tooltip("Random spread for turning on pre-assigned followers after the swarm starts. Does not affect spawned fish.")]
+    [SerializeField] private float activateStaggerSeconds;
+    [Tooltip("Invoked when movement begins (after any activate delay).")]
+    [SerializeField] private UnityEvent onSwarmStarted;
 
-    [Header("Boids")]
-    [Tooltip("Neighbors within this distance contribute separation, alignment, and cohesion.")]
-    [SerializeField] private float neighborRadius = 3f;
-    [SerializeField] private float separationWeight = 1.5f;
-    [SerializeField] private float alignmentWeight = 0.8f;
-    [SerializeField] private float cohesionWeight = 0.5f;
-    [Tooltip("Caps how far boid steering can offset the follow target.")]
-    [SerializeField] private float maxBoidOffset = 2f;
-
-    private readonly List<Vector3> _velocities = new List<Vector3>();
-    private readonly List<Vector3> _desiredPositions = new List<Vector3>();
     private readonly List<FollowerState> _states = new List<FollowerState>();
 
-    private Transform _cameraTransform;
-    private float _neighborRadiusSq;
+    private bool _movingForward = true;
+    private bool _swarmRunning;
+    private float _externalScaleMultiplier = 1f;
     private float _nextSpawnTime;
-    private Vector3 _targetPreviousPosition;
-    private Vector3 _targetMoveDirection = Vector3.forward;
     private Coroutine _activateFollowersRoutine;
+    private Coroutine _delayedStartRoutine;
     private bool _swarmFollowingActive;
+    private int _nextSlotIndex;
+    private float _swarmStartedTime = -1f;
+
+    public bool IsSwarmRunning => _swarmRunning;
+    public bool IsAwaitingStart => _delayedStartRoutine != null;
+    public bool HasSwarmStarted => _swarmStartedTime >= 0f;
+    public float SwarmStartedTime => _swarmStartedTime;
+
+    public event System.Action SwarmStarted;
 
     private void OnValidate()
     {
-        followSmoothTime = Mathf.Max(0.01f, followSmoothTime);
-        followSpeed = Mathf.Max(0.01f, followSpeed);
-        turnSpeed = Mathf.Max(0f, turnSpeed);
-        minSpeedMultiplier = Mathf.Max(0.1f, minSpeedMultiplier);
-        maxSpeedMultiplier = Mathf.Max(minSpeedMultiplier, maxSpeedMultiplier);
-        neighborRadius = Mathf.Max(0.01f, neighborRadius);
-        separationWeight = Mathf.Max(0f, separationWeight);
-        alignmentWeight = Mathf.Max(0f, alignmentWeight);
-        cohesionWeight = Mathf.Max(0f, cohesionWeight);
-        maxBoidOffset = Mathf.Max(0f, maxBoidOffset);
-        strayOffsetDistance = Mathf.Max(0.1f, strayOffsetDistance);
-        strayMinDuration = Mathf.Max(0.1f, strayMinDuration);
-        strayMaxDuration = Mathf.Max(strayMinDuration, strayMaxDuration);
-        behaviorRollMinInterval = Mathf.Max(0.1f, behaviorRollMinInterval);
-        behaviorRollMaxInterval = Mathf.Max(behaviorRollMinInterval, behaviorRollMaxInterval);
-        minCameraCuriousCount = Mathf.Max(0, minCameraCuriousCount);
-        maxCameraCuriousCount = Mathf.Max(minCameraCuriousCount, maxCameraCuriousCount);
-        cameraWatchDistance = Mathf.Max(0.1f, cameraWatchDistance);
-        cameraArriveDistance = Mathf.Max(0.1f, cameraArriveDistance);
-        cameraWatchMinDuration = Mathf.Max(0.1f, cameraWatchMinDuration);
-        cameraWatchMaxDuration = Mathf.Max(cameraWatchMinDuration, cameraWatchMaxDuration);
-        cameraTooCloseDistance = Mathf.Max(0.1f, cameraTooCloseDistance);
-        cameraSafeDistance = Mathf.Max(cameraTooCloseDistance, cameraSafeDistance);
-        escapeSpeed = Mathf.Max(followSpeed, escapeSpeed);
-        escapeFleeDistance = Mathf.Max(0.1f, escapeFleeDistance);
-        cameraLookTurnSpeed = Mathf.Max(0f, cameraLookTurnSpeed);
-        swayAmplitude = Mathf.Max(0f, swayAmplitude);
-        swaySpeed = Mathf.Max(0f, swaySpeed);
+        headGap = Mathf.Max(0f, headGap);
+        fishSpacing = Mathf.Max(0.05f, fishSpacing);
+        tubeRadius = Mathf.Max(0f, tubeRadius);
+        tubeWobbleAmplitude = Mathf.Max(0f, tubeWobbleAmplitude);
+        tubeWobbleSpeed = Mathf.Max(0f, tubeWobbleSpeed);
+        minFishScale = Mathf.Max(0.01f, minFishScale);
+        maxFishScale = Mathf.Max(minFishScale, maxFishScale);
+        fishScaleCycleSeconds = Mathf.Max(0.01f, fishScaleCycleSeconds);
+        pathSpeed = Mathf.Max(0f, pathSpeed);
         maxFishCount = Mathf.Max(1, maxFishCount);
-        spawnDistance = Mathf.Max(0.1f, spawnDistance);
-        spawnMinInterval = Mathf.Max(0.1f, spawnMinInterval);
+        spawnMinInterval = Mathf.Max(0f, spawnMinInterval);
         spawnMaxInterval = Mathf.Max(spawnMinInterval, spawnMaxInterval);
-        formationMeanBehind = Mathf.Max(0f, formationMeanBehind);
-        formationStdBehind = Mathf.Max(0.01f, formationStdBehind);
-        formationStdLateral = Mathf.Max(0.01f, formationStdLateral);
-        formationStdVertical = Mathf.Max(0.01f, formationStdVertical);
-        formationMinBehind = Mathf.Max(0f, formationMinBehind);
-        formationMaxBehind = Mathf.Max(formationMinBehind, formationMaxBehind);
-        _neighborRadiusSq = neighborRadius * neighborRadius;
+        activateDelaySeconds = Mathf.Max(0f, activateDelaySeconds);
+        activateStaggerSeconds = Mathf.Max(0f, activateStaggerSeconds);
     }
 
     private void Awake()
     {
-        _neighborRadiusSq = neighborRadius * neighborRadius;
-        CacheCamera();
+        _movingForward = true;
     }
 
     private void Start()
     {
-        ResetVelocities();
-        InitializeFollowerStates();
+        AssignTrailSlots();
         ScheduleNextSpawn();
-        if (target != null)
+
+        if (activateOnPlay)
         {
-            _targetPreviousPosition = target.position;
-            _targetMoveDirection = target.forward.sqrMagnitude > 0.0001f ? target.forward : Vector3.forward;
+            ScheduleAutoStart();
+        }
+        else
+        {
+            DeactivateAllFollowers();
         }
     }
 
-    private void Update()
+    private void ScheduleAutoStart()
     {
-        if (target == null)
+        CancelDelayedStart();
+
+        if (activateDelaySeconds > 0f)
+        {
+            DeactivateAllFollowers();
+            _delayedStartRoutine = StartCoroutine(DelayedBeginSwarmRoutine());
+            return;
+        }
+
+        BeginSwarmInternal(activateStaggerSeconds);
+    }
+
+    /// <summary>
+    /// Starts this swarm using this component's delay and stagger settings.
+    /// Used by SplineFishGroupOrchestrator for group B and for manual triggers.
+    /// </summary>
+    public void RequestStart()
+    {
+        ScheduleAutoStart();
+    }
+
+    private IEnumerator DelayedBeginSwarmRoutine()
+    {
+        yield return new WaitForSeconds(activateDelaySeconds);
+        _delayedStartRoutine = null;
+        BeginSwarmInternal(activateStaggerSeconds);
+    }
+
+    private void CancelDelayedStart()
+    {
+        if (_delayedStartRoutine == null)
         {
             return;
         }
 
-        CacheCamera();
-        EnsureBuffers();
-        if (_swarmFollowingActive)
+        StopCoroutine(_delayedStartRoutine);
+        _delayedStartRoutine = null;
+    }
+
+    private void Update()
+    {
+        if (spline == null)
         {
-            TrySpawnFollower();
+            return;
         }
 
-        UpdateTargetMotion();
+        EnsureBuffers();
 
-        Vector3 targetPosition = target.position;
-        for (int i = 0; i < followers.Count; i++)
+        if (_swarmRunning)
         {
-            Transform follower = followers[i];
-            if (!IsFollowerActive(follower))
-            {
-                continue;
-            }
+            AdvanceAllFish(Time.deltaTime);
+        }
 
-            UpdateBehaviorMode(i);
-            _desiredPositions[i] = ComputeDesiredPosition(i, targetPosition);
+        if (_swarmRunning && _swarmFollowingActive)
+        {
+            TrySpawnFollower();
         }
 
         for (int i = 0; i < followers.Count; i++)
@@ -207,615 +213,107 @@ public class VertexPathSwarmFollower : MonoBehaviour
                 continue;
             }
 
-            Vector3 oldPosition = follower.position;
-            Vector3 velocity = _velocities[i];
-            float maxSpeed = GetMaxSpeed(state);
-            follower.position = Vector3.SmoothDamp(
-                oldPosition,
-                _desiredPositions[i],
-                ref velocity,
-                followSmoothTime,
-                maxSpeed
-            );
-            _velocities[i] = velocity;
-
-            ApplyRotation(follower, state, oldPosition);
-        }
-    }
-
-    private void InitializeFollowerStates()
-    {
-        _states.Clear();
-        HashSet<int> cameraCuriousIndices = PickCameraCuriousIndices();
-
-        for (int i = 0; i < followers.Count; i++)
-        {
-            _states.Add(CreateFollowerState(cameraCuriousIndices.Contains(i)));
-        }
-    }
-
-    private FollowerState CreateFollowerState(bool isCameraCurious)
-    {
-        float speedMultiplier = Random.Range(minSpeedMultiplier, maxSpeedMultiplier);
-        return new FollowerState
-        {
-            MaxSpeed = followSpeed * speedMultiplier,
-            Mode = FollowerMode.Following,
-            ModeEndTime = 0f,
-            NextBehaviorRollTime = Time.time + Random.Range(behaviorRollMinInterval, behaviorRollMaxInterval),
-            StrayOffset = Vector3.zero,
-            IsCameraCurious = isCameraCurious,
-            SwayPhase = Random.Range(0f, Mathf.PI * 2f),
-            FormationBehind = SampleFormationBehind(),
-            FormationLateral = SampleGaussian(0f, formationStdLateral),
-            FormationVertical = SampleGaussian(0f, formationStdVertical)
-        };
-    }
-
-    private float SampleFormationBehind()
-    {
-        float behind = SampleGaussian(formationMeanBehind, formationStdBehind);
-        return Mathf.Clamp(behind, formationMinBehind, formationMaxBehind);
-    }
-
-    private static float SampleGaussian(float mean, float standardDeviation)
-    {
-        float u1 = Mathf.Max(1e-6f, Random.value);
-        float u2 = Random.value;
-        float standardNormal = Mathf.Sqrt(-2f * Mathf.Log(u1)) * Mathf.Cos(2f * Mathf.PI * u2);
-        return mean + standardDeviation * standardNormal;
-    }
-
-    private void UpdateTargetMotion()
-    {
-        Vector3 delta = target.position - _targetPreviousPosition;
-        if (delta.sqrMagnitude > 0.0001f)
-        {
-            _targetMoveDirection = delta.normalized;
-        }
-        else if (target.forward.sqrMagnitude > 0.0001f)
-        {
-            _targetMoveDirection = target.forward;
-        }
-
-        _targetPreviousPosition = target.position;
-    }
-
-    private Vector3 GetFormationOffset(FollowerState state)
-    {
-        Vector3 behind = -_targetMoveDirection;
-        behind.y = 0f;
-        if (behind.sqrMagnitude < 0.0001f)
-        {
-            behind = -target.forward;
-            behind.y = 0f;
-        }
-
-        behind.Normalize();
-        Vector3 right = Vector3.Cross(Vector3.up, behind);
-        if (right.sqrMagnitude < 0.0001f)
-        {
-            right = Vector3.right;
-        }
-
-        right.Normalize();
-        Vector3 up = Vector3.up;
-
-        return (behind * state.FormationBehind)
-            + (right * state.FormationLateral)
-            + (up * state.FormationVertical);
-    }
-
-    private void ScheduleNextSpawn()
-    {
-        _nextSpawnTime = Time.time + Random.Range(spawnMinInterval, spawnMaxInterval);
-    }
-
-    private static bool IsFollowerActive(Transform follower)
-    {
-        return follower != null && follower.gameObject.activeSelf;
-    }
-
-    private void TrySpawnFollower()
-    {
-        if (!_swarmFollowingActive || followerPrefab == null || Time.time < _nextSpawnTime)
-        {
-            return;
-        }
-
-        ScheduleNextSpawn();
-
-        if (GetValidFollowerCount() >= maxFishCount)
-        {
-            return;
-        }
-
-        Vector3 offset = Random.onUnitSphere;
-        offset.y *= 0.4f;
-        if (offset.sqrMagnitude < 0.0001f)
-        {
-            offset = Vector3.right;
-        }
-
-        offset = offset.normalized * spawnDistance;
-        Vector3 spawnPosition = target.position + offset;
-        Transform parent = spawnParent != null ? spawnParent : transform;
-        GameObject instance = Instantiate(followerPrefab, spawnPosition, Quaternion.identity, parent);
-        instance.SetActive(true);
-
-        followers.Add(instance.transform);
-        _velocities.Add(Vector3.zero);
-        _desiredPositions.Add(spawnPosition);
-        _states.Add(CreateFollowerState(isCameraCurious: false));
-    }
-
-    private int GetValidFollowerCount()
-    {
-        int count = 0;
-        for (int i = 0; i < followers.Count; i++)
-        {
-            if (followers[i] != null)
-            {
-                count++;
-            }
-        }
-
-        return count;
-    }
-
-    private HashSet<int> PickCameraCuriousIndices()
-    {
-        var chosen = new HashSet<int>();
-        if (followers.Count == 0)
-        {
-            return chosen;
-        }
-
-        int desiredCount = Mathf.Clamp(
-            Random.Range(minCameraCuriousCount, maxCameraCuriousCount + 1),
-            0,
-            followers.Count
-        );
-
-        var candidates = new List<int>();
-        for (int i = 0; i < followers.Count; i++)
-        {
-            if (followers[i] != null)
-            {
-                candidates.Add(i);
-            }
-        }
-
-        while (chosen.Count < desiredCount && candidates.Count > 0)
-        {
-            int pick = Random.Range(0, candidates.Count);
-            chosen.Add(candidates[pick]);
-            candidates.RemoveAt(pick);
-        }
-
-        return chosen;
-    }
-
-    private void UpdateBehaviorMode(int index)
-    {
-        FollowerState state = _states[index];
-        Transform follower = followers[index];
-        if (state == null || follower == null)
-        {
-            return;
-        }
-
-        float cameraDistance = GetCameraDistance(follower.position);
-
-        if (_cameraTransform != null && cameraDistance < cameraTooCloseDistance)
-        {
-            EnterEscapeMode(state);
-            return;
-        }
-
-        switch (state.Mode)
-        {
-            case FollowerMode.Following:
-                if (Time.time >= state.NextBehaviorRollTime)
-                {
-                    TryRollNewBehavior(state);
-                }
-                break;
-
-            case FollowerMode.Straying:
-                if (Time.time >= state.ModeEndTime)
-                {
-                    SetFollowing(state);
-                }
-                break;
-
-            case FollowerMode.SeekingCamera:
-                if (_cameraTransform == null)
-                {
-                    SetFollowing(state);
-                    break;
-                }
-
-                if (HasReachedCameraWatchPoint(follower.position))
-                {
-                    EnterWatchCameraMode(state);
-                }
-                else if (Time.time >= state.ModeEndTime)
-                {
-                    SetFollowing(state);
-                }
-                break;
-
-            case FollowerMode.WatchingCamera:
-                if (_cameraTransform == null)
-                {
-                    SetFollowing(state);
-                    break;
-                }
-
-                if (Time.time >= state.ModeEndTime)
-                {
-                    SetFollowing(state);
-                }
-                break;
-
-            case FollowerMode.EscapingCamera:
-                if (_cameraTransform == null || cameraDistance >= cameraSafeDistance)
-                {
-                    SetFollowing(state);
-                }
-                break;
-        }
-    }
-
-    private void TryRollNewBehavior(FollowerState state)
-    {
-        state.NextBehaviorRollTime = Time.time + Random.Range(behaviorRollMinInterval, behaviorRollMaxInterval);
-
-        if (state.IsCameraCurious && _cameraTransform != null && Random.value < cameraSeekChance)
-        {
-            EnterSeekCameraMode(state);
-            return;
-        }
-
-        if (Random.value < strayChance)
-        {
-            EnterStrayMode(state);
-        }
-    }
-
-    private void EnterStrayMode(FollowerState state)
-    {
-        Vector3 randomOffset = Random.onUnitSphere;
-        randomOffset.y *= 0.35f;
-        if (randomOffset.sqrMagnitude < 0.0001f)
-        {
-            randomOffset = Vector3.right;
-        }
-
-        state.StrayOffset = randomOffset.normalized * strayOffsetDistance;
-        state.Mode = FollowerMode.Straying;
-        state.ModeEndTime = Time.time + Random.Range(strayMinDuration, strayMaxDuration);
-    }
-
-    private void EnterSeekCameraMode(FollowerState state)
-    {
-        state.Mode = FollowerMode.SeekingCamera;
-        state.ModeEndTime = Time.time + cameraSeekMaxDuration;
-    }
-
-    private void EnterWatchCameraMode(FollowerState state)
-    {
-        state.Mode = FollowerMode.WatchingCamera;
-        state.ModeEndTime = Time.time + Random.Range(cameraWatchMinDuration, cameraWatchMaxDuration);
-    }
-
-    private void EnterEscapeMode(FollowerState state)
-    {
-        state.Mode = FollowerMode.EscapingCamera;
-        state.ModeEndTime = Time.time + 5f;
-    }
-
-    private void SetFollowing(FollowerState state)
-    {
-        state.Mode = FollowerMode.Following;
-        state.ModeEndTime = 0f;
-        state.StrayOffset = Vector3.zero;
-    }
-
-    private Vector3 ComputeDesiredPosition(int index, Vector3 targetPosition)
-    {
-        Transform follower = followers[index];
-        FollowerState state = _states[index];
-        if (follower == null || state == null)
-        {
-            return targetPosition;
-        }
-
-        Vector3 goal = targetPosition + GetFormationOffset(state);
-        bool applyBoids = true;
-        bool useFormationCohesionScale = true;
-
-        switch (state.Mode)
-        {
-            case FollowerMode.Straying:
-                goal = targetPosition + state.StrayOffset;
-                useFormationCohesionScale = false;
-                break;
-
-            case FollowerMode.SeekingCamera:
-                goal = GetCameraWatchPosition(follower.position);
-                applyBoids = false;
-                useFormationCohesionScale = false;
-                break;
-
-            case FollowerMode.WatchingCamera:
-                goal = GetCameraMaintainPosition(follower.position);
-                applyBoids = false;
-                useFormationCohesionScale = false;
-                break;
-
-            case FollowerMode.EscapingCamera:
-                goal = follower.position + GetAwayFromCameraDirection(follower.position) * escapeFleeDistance;
-                applyBoids = false;
-                useFormationCohesionScale = false;
-                break;
-        }
-
-        if (applyBoids)
-        {
-            goal += ComputeBoidOffset(index, follower, useFormationCohesionScale);
-        }
-
-        return ApplySway(state, goal);
-    }
-
-    private Vector3 ApplySway(FollowerState state, Vector3 position)
-    {
-        if (swayAmplitude <= 0f || swaySpeed <= 0f)
-        {
-            return position;
-        }
-
-        position.y += Mathf.Sin(Time.time * swaySpeed + state.SwayPhase) * swayAmplitude;
-        return position;
-    }
-
-    private Vector3 ComputeBoidOffset(int index, Transform follower, bool scaleCohesionForFormation)
-    {
-        Vector3 position = follower.position;
-        Vector3 separation = Vector3.zero;
-        Vector3 alignmentSum = Vector3.zero;
-        Vector3 cohesionSum = Vector3.zero;
-        int separationCount = 0;
-        int alignmentCount = 0;
-        int cohesionCount = 0;
-
-        for (int j = 0; j < followers.Count; j++)
-        {
-            if (j == index)
+            if (!SampleFishFrame(state, out Vector3 slotCenter, out Vector3 tangent, out Vector3 right, out Vector3 up))
             {
                 continue;
             }
 
-            Transform neighbor = followers[j];
-            if (!IsFollowerActive(neighbor))
-            {
-                continue;
-            }
-
-            Vector3 toNeighbor = neighbor.position - position;
-            float distSq = toNeighbor.sqrMagnitude;
-            if (distSq > _neighborRadiusSq)
-            {
-                continue;
-            }
-
-            float dist = Mathf.Sqrt(distSq);
-
-            if (dist > 0.0001f)
-            {
-                separation += -toNeighbor / dist;
-                separationCount++;
-            }
-
-            alignmentSum += GetMovementDirection(j, neighbor);
-            alignmentCount++;
-            cohesionSum += neighbor.position;
-            cohesionCount++;
-        }
-
-        Vector3 boidOffset = Vector3.zero;
-
-        if (separationCount > 0 && separationWeight > 0f)
-        {
-            boidOffset += (separation / separationCount).normalized * separationWeight;
-        }
-
-        if (alignmentCount > 0 && alignmentWeight > 0f)
-        {
-            Vector3 averageDirection = (alignmentSum / alignmentCount).normalized;
-            Vector3 selfDirection = GetMovementDirection(index, follower);
-            if (averageDirection.sqrMagnitude > 0.0001f && selfDirection.sqrMagnitude > 0.0001f)
-            {
-                boidOffset += (averageDirection - selfDirection) * alignmentWeight;
-            }
-        }
-
-        if (cohesionCount > 0 && cohesionWeight > 0f)
-        {
-            Vector3 center = cohesionSum / cohesionCount;
-            Vector3 toCenter = center - position;
-            if (toCenter.sqrMagnitude > 0.0001f)
-            {
-                float cohesionScale = scaleCohesionForFormation ? formationCohesionScale : 1f;
-                boidOffset += toCenter.normalized * cohesionWeight * cohesionScale;
-            }
-        }
-
-        if (maxBoidOffset > 0f && boidOffset.sqrMagnitude > maxBoidOffset * maxBoidOffset)
-        {
-            boidOffset = boidOffset.normalized * maxBoidOffset;
-        }
-
-        return boidOffset;
-    }
-
-    private Vector3 GetCameraWatchPosition(Vector3 followerPosition)
-    {
-        Vector3 fromCamera = followerPosition - _cameraTransform.position;
-        fromCamera.y = 0f;
-        if (fromCamera.sqrMagnitude < 0.01f)
-        {
-            fromCamera = -_cameraTransform.forward;
-            fromCamera.y = 0f;
-        }
-
-        fromCamera.Normalize();
-        Vector3 watchPoint = _cameraTransform.position + fromCamera * cameraWatchDistance;
-        watchPoint.y = followerPosition.y;
-        return watchPoint;
-    }
-
-    private Vector3 GetCameraMaintainPosition(Vector3 followerPosition)
-    {
-        Vector3 fromCamera = followerPosition - _cameraTransform.position;
-        float distance = fromCamera.magnitude;
-        if (distance < 0.01f)
-        {
-            fromCamera = -_cameraTransform.forward;
-            distance = 1f;
-        }
-
-        Vector3 direction = fromCamera / distance;
-        float idealDistance = cameraWatchDistance;
-        if (distance < idealDistance * 0.92f || distance > idealDistance * 1.08f)
-        {
-            Vector3 adjusted = _cameraTransform.position + direction * idealDistance;
-            adjusted.y = followerPosition.y;
-            return adjusted;
-        }
-
-        return followerPosition;
-    }
-
-    private Vector3 GetAwayFromCameraDirection(Vector3 followerPosition)
-    {
-        Vector3 away = followerPosition - _cameraTransform.position;
-        away.y = 0f;
-        if (away.sqrMagnitude < 0.0001f)
-        {
-            away = _cameraTransform.forward;
-            away.y = 0f;
-        }
-
-        return away.normalized;
-    }
-
-    private bool HasReachedCameraWatchPoint(Vector3 followerPosition)
-    {
-        Vector3 watchPoint = GetCameraWatchPosition(followerPosition);
-        return Vector3.Distance(followerPosition, watchPoint) <= cameraArriveDistance;
-    }
-
-    private float GetCameraDistance(Vector3 followerPosition)
-    {
-        if (_cameraTransform == null)
-        {
-            return float.MaxValue;
-        }
-
-        return Vector3.Distance(followerPosition, _cameraTransform.position);
-    }
-
-    private float GetMaxSpeed(FollowerState state)
-    {
-        if (state.Mode == FollowerMode.EscapingCamera)
-        {
-            return escapeSpeed;
-        }
-
-        return state.MaxSpeed;
-    }
-
-    private void ApplyRotation(Transform follower, FollowerState state, Vector3 oldPosition)
-    {
-        if (state.Mode == FollowerMode.WatchingCamera && _cameraTransform != null && cameraLookTurnSpeed > 0f)
-        {
-            Vector3 toCamera = _cameraTransform.position - follower.position;
-            toCamera.y = 0f;
-            if (toCamera.sqrMagnitude > 0.0001f)
-            {
-                Quaternion lookRotation = Quaternion.LookRotation(toCamera.normalized, Vector3.up);
-                follower.rotation = Quaternion.Slerp(
-                    follower.rotation,
-                    lookRotation,
-                    Time.deltaTime * cameraLookTurnSpeed
-                );
-            }
-
-            return;
-        }
-
-        Vector3 movement = follower.position - oldPosition;
-        if (movement.sqrMagnitude > 0.00001f && turnSpeed > 0f)
-        {
-            Quaternion targetRotation = Quaternion.LookRotation(movement.normalized, Vector3.up);
-            follower.rotation = Quaternion.Slerp(
-                follower.rotation,
-                targetRotation,
-                Time.deltaTime * turnSpeed
-            );
-        }
-    }
-
-    private Vector3 GetMovementDirection(int index, Transform follower)
-    {
-        Vector3 velocity = _velocities[index];
-        if (velocity.sqrMagnitude > 0.0001f)
-        {
-            return velocity.normalized;
-        }
-
-        return follower.forward;
-    }
-
-    private void CacheCamera()
-    {
-        if (_cameraTransform != null)
-        {
-            return;
-        }
-
-        Camera mainCamera = Camera.main;
-        if (mainCamera != null)
-        {
-            _cameraTransform = mainCamera.transform;
+            follower.position = ApplyTubeOffset(state, slotCenter, right, up);
+            follower.rotation = GetFollowerRotation(tangent, up);
+            ApplyFishScale(follower, state);
         }
     }
 
     public void ActivateFollowersAndStartSwarm()
     {
-        ActivateFollowersAndStartSwarm(3f);
+        RequestStart();
     }
 
     public void ActivateFollowersAndStartSwarm(float activateStaggerSeconds)
     {
+        CancelDelayedStart();
+        BeginSwarmInternal(activateStaggerSeconds);
+    }
+
+    public void BeginSwarm()
+    {
+        BeginSwarmInternal(activateStaggerSeconds);
+    }
+
+    public void BeginSwarm(float activateStaggerSeconds)
+    {
+        CancelDelayedStart();
+        BeginSwarmInternal(activateStaggerSeconds);
+    }
+
+    private void BeginSwarmInternal(float staggerSeconds)
+    {
+        CancelDelayedStart();
+
         if (_activateFollowersRoutine != null)
         {
             StopCoroutine(_activateFollowersRoutine);
         }
 
+        _externalScaleMultiplier = 1f;
+        _swarmRunning = true;
+        _swarmStartedTime = Time.time;
+        onSwarmStarted?.Invoke();
+        SwarmStarted?.Invoke();
         _activateFollowersRoutine = StartCoroutine(
-            ActivateFollowersStaggeredRoutine(activateStaggerSeconds)
+            ActivateFollowersStaggeredRoutine(staggerSeconds)
         );
+    }
+
+    public void StopSwarmImmediate()
+    {
+        CancelDelayedStart();
+
+        if (_activateFollowersRoutine != null)
+        {
+            StopCoroutine(_activateFollowersRoutine);
+            _activateFollowersRoutine = null;
+        }
+
+        _swarmRunning = false;
+        _swarmFollowingActive = false;
+        _externalScaleMultiplier = 1f;
+        _swarmStartedTime = -1f;
+        DeactivateAllFollowers();
+    }
+
+    public IEnumerator ShrinkAndStopSwarm(float duration)
+    {
+        duration = Mathf.Max(0.01f, duration);
+        float elapsed = 0f;
+
+        while (elapsed < duration)
+        {
+            elapsed += Time.deltaTime;
+            _externalScaleMultiplier = Mathf.Lerp(1f, 0f, elapsed / duration);
+            yield return null;
+        }
+
+        _externalScaleMultiplier = 0f;
+        StopSwarmImmediate();
+    }
+
+    private void DeactivateAllFollowers()
+    {
+        for (int i = 0; i < followers.Count; i++)
+        {
+            Transform follower = followers[i];
+            if (follower != null)
+            {
+                follower.gameObject.SetActive(false);
+            }
+        }
     }
 
     private IEnumerator ActivateFollowersStaggeredRoutine(float activateStaggerSeconds)
     {
         _swarmFollowingActive = true;
-        ResetVelocities();
-        InitializeFollowerStates();
+        AssignTrailSlots();
         ScheduleNextSpawn();
 
         var activationSchedule = new List<(int index, Transform follower, float activateTime)>();
@@ -846,54 +344,395 @@ public class VertexPathSwarmFollower : MonoBehaviour
             }
 
             follower.gameObject.SetActive(true);
-            if (index >= 0 && index < _velocities.Count)
-            {
-                _velocities[index] = Vector3.zero;
-            }
+            SnapFollowerToSlot(index);
         }
 
         _activateFollowersRoutine = null;
     }
 
+    private void AdvanceAllFish(float deltaTime)
+    {
+        if (pathSpeed <= 0f)
+        {
+            return;
+        }
+
+        float delta = (_movingForward ? pathSpeed : -pathSpeed) * deltaTime;
+
+        for (int i = 0; i < followers.Count; i++)
+        {
+            if (_states[i] == null)
+            {
+                continue;
+            }
+
+            FollowerState state = _states[i];
+            spline.MoveAlongSpline(ref state.NormalizedT, delta, PathSampleAccuracy);
+            WrapFishNormalizedT(state);
+        }
+
+        PostProcessConvoyMovement();
+    }
+
+    private void WrapFishNormalizedT(FollowerState state)
+    {
+        if (travelMode == TravelMode.Loop || travelMode == TravelMode.Once)
+        {
+            state.NormalizedT = Mathf.Repeat(state.NormalizedT, 1f);
+        }
+    }
+
+    private void PostProcessConvoyMovement()
+    {
+        if (travelMode != TravelMode.PingPong)
+        {
+            return;
+        }
+
+        FollowerState lead = GetLeadState();
+        if (lead == null)
+        {
+            return;
+        }
+
+        if (_movingForward)
+        {
+            if (lead.NormalizedT < 1f)
+            {
+                return;
+            }
+
+            lead.NormalizedT = 2f - lead.NormalizedT;
+            _movingForward = false;
+            return;
+        }
+
+        if (lead.NormalizedT > 0f)
+        {
+            return;
+        }
+
+        lead.NormalizedT = -lead.NormalizedT;
+        _movingForward = true;
+    }
+
+    private FollowerState GetLeadState()
+    {
+        FollowerState lead = null;
+        int bestSlot = int.MaxValue;
+
+        for (int i = 0; i < followers.Count; i++)
+        {
+            if (!IsFollowerActive(followers[i]) || _states[i] == null)
+            {
+                continue;
+            }
+
+            if (_states[i].SlotIndex < bestSlot)
+            {
+                bestSlot = _states[i].SlotIndex;
+                lead = _states[i];
+            }
+        }
+
+        return lead;
+    }
+
+    private void AssignTrailSlots()
+    {
+        _states.Clear();
+        _nextSlotIndex = 0;
+        _movingForward = true;
+
+        for (int i = 0; i < followers.Count; i++)
+        {
+            if (followers[i] == null)
+            {
+                _states.Add(null);
+                continue;
+            }
+
+            _states.Add(CreateFollowerState(_nextSlotIndex));
+            _nextSlotIndex++;
+        }
+    }
+
+    private FollowerState CreateFollowerState(int slotIndex)
+    {
+        float radiusScale = tubeRadiusVariation <= 0f
+            ? 0f
+            : Random.Range(1f - tubeRadiusVariation, 1f);
+
+        return new FollowerState
+        {
+            SlotIndex = slotIndex,
+            NormalizedT = ComputeNormalizedTForNewSlot(slotIndex),
+            TubeAngle = Random.Range(0f, Mathf.PI * 2f),
+            TubeRadius = tubeRadius * radiusScale,
+            WobblePhase = Random.Range(0f, Mathf.PI * 2f),
+            WobbleSpeed = tubeWobbleSpeed * Random.Range(0.85f, 1.15f),
+            ScalePhase = Random.Range(0f, fishScaleCycleSeconds)
+        };
+    }
+
+    private float ComputeNormalizedTForNewSlot(int slotIndex)
+    {
+        if (slotIndex <= 0)
+        {
+            return OffsetNormalizedTFromFront(headGap);
+        }
+
+        FollowerState previous = FindStateBySlot(slotIndex - 1);
+        if (previous != null)
+        {
+            float normalizedT = previous.NormalizedT;
+            float delta = _movingForward ? -fishSpacing : fishSpacing;
+            spline.MoveAlongSpline(ref normalizedT, delta, PathSampleAccuracy);
+            return normalizedT;
+        }
+
+        return OffsetNormalizedTFromFront(headGap + slotIndex * fishSpacing);
+    }
+
+    private FollowerState FindStateBySlot(int slotIndex)
+    {
+        for (int i = 0; i < _states.Count; i++)
+        {
+            if (_states[i] != null && _states[i].SlotIndex == slotIndex)
+            {
+                return _states[i];
+            }
+        }
+
+        return null;
+    }
+
+    private float OffsetNormalizedTFromFront(float arcDistanceBehindFront)
+    {
+        float normalizedT = startNormalizedT;
+        float delta = _movingForward ? -arcDistanceBehindFront : arcDistanceBehindFront;
+        spline.MoveAlongSpline(ref normalizedT, delta, PathSampleAccuracy);
+        return normalizedT;
+    }
+
+    private void TrySpawnFollower()
+    {
+        if (!_swarmFollowingActive || followerPrefab == null || Time.time < _nextSpawnTime)
+        {
+            return;
+        }
+
+        ScheduleNextSpawn();
+
+        if (_nextSlotIndex >= maxFishCount)
+        {
+            return;
+        }
+
+        FollowerState spawnState = CreateFollowerState(_nextSlotIndex);
+        _nextSlotIndex++;
+
+        Vector3 spawnPosition = spline.GetPoint(spawnState.NormalizedT);
+        if (SampleFishFrame(spawnState, out Vector3 slotCenter, out _, out Vector3 right, out Vector3 up))
+        {
+            spawnPosition = ApplyTubeOffset(spawnState, slotCenter, right, up);
+        }
+
+        Transform parent = spawnParent != null ? spawnParent : transform;
+        GameObject instance = Instantiate(followerPrefab, spawnPosition, Quaternion.identity, parent);
+        instance.SetActive(true);
+
+        followers.Add(instance.transform);
+        _states.Add(spawnState);
+        InitializeFollowerScale(instance.transform, spawnState);
+    }
+
+    private void SnapFollowerToSlot(int index)
+    {
+        if (index < 0 || index >= followers.Count || index >= _states.Count)
+        {
+            return;
+        }
+
+        Transform follower = followers[index];
+        FollowerState state = _states[index];
+        if (!IsFollowerActive(follower) || state == null)
+        {
+            return;
+        }
+
+        if (!SampleFishFrame(state, out Vector3 slotCenter, out Vector3 tangent, out Vector3 right, out Vector3 up))
+        {
+            return;
+        }
+
+        follower.position = ApplyTubeOffset(state, slotCenter, right, up);
+        follower.rotation = GetFollowerRotation(tangent, up);
+        ApplyFishScale(follower, state);
+    }
+
+    private Quaternion GetFollowerRotation(Vector3 tangent, Vector3 pathUp)
+    {
+        Quaternion modelAxisCorrection = Quaternion.FromToRotation(
+            GetModelForwardAxisVector(modelForwardAxis),
+            Vector3.forward
+        );
+        Quaternion extraOffset = Quaternion.Euler(rotationOffsetEuler);
+
+        if (tangent.sqrMagnitude <= 0.0001f)
+        {
+            return modelAxisCorrection * extraOffset;
+        }
+
+        Vector3 upDirection = pathUp.sqrMagnitude > 0.0001f ? pathUp : Vector3.up;
+        return Quaternion.LookRotation(tangent, upDirection) * modelAxisCorrection * extraOffset;
+    }
+
+    private static Vector3 GetModelForwardAxisVector(ModelForwardAxis axis)
+    {
+        switch (axis)
+        {
+            case ModelForwardAxis.PositiveX:
+                return Vector3.right;
+            case ModelForwardAxis.NegativeX:
+                return Vector3.left;
+            case ModelForwardAxis.PositiveY:
+                return Vector3.up;
+            case ModelForwardAxis.NegativeY:
+                return Vector3.down;
+            case ModelForwardAxis.PositiveZ:
+                return Vector3.forward;
+            case ModelForwardAxis.NegativeZ:
+                return Vector3.back;
+            default:
+                return Vector3.forward;
+        }
+    }
+
+    private void InitializeFollowerScale(Transform follower, FollowerState state)
+    {
+        if (follower == null || state == null || state.HasBaseScale)
+        {
+            return;
+        }
+
+        state.BaseLocalScale = follower.localScale;
+        state.HasBaseScale = true;
+    }
+
+    private void ApplyFishScale(Transform follower, FollowerState state)
+    {
+        if (follower == null || state == null)
+        {
+            return;
+        }
+
+        InitializeFollowerScale(follower, state);
+
+        if (fishScaleCycleSeconds <= 0f || Mathf.Approximately(minFishScale, maxFishScale))
+        {
+            follower.localScale = state.BaseLocalScale * minFishScale * _externalScaleMultiplier;
+            return;
+        }
+
+        float phaseTime = Time.time + state.ScalePhase;
+        float t = (Mathf.Sin(phaseTime / fishScaleCycleSeconds * (Mathf.PI * 2f)) + 1f) * 0.5f;
+        float scaleMultiplier = Mathf.Lerp(minFishScale, maxFishScale, t);
+        follower.localScale = state.BaseLocalScale * scaleMultiplier * _externalScaleMultiplier;
+    }
+
+    private Vector3 ApplyTubeOffset(
+        FollowerState state,
+        Vector3 center,
+        Vector3 right,
+        Vector3 up)
+    {
+        float wobble = tubeWobbleAmplitude > 0f
+            ? Mathf.Sin(Time.time * state.WobbleSpeed + state.WobblePhase) * tubeWobbleAmplitude
+            : 0f;
+        float radius = state.TubeRadius + wobble;
+
+        return center
+            + right * (Mathf.Cos(state.TubeAngle) * radius)
+            + up * (Mathf.Sin(state.TubeAngle) * radius);
+    }
+
+    private bool SampleFishFrame(
+        FollowerState state,
+        out Vector3 position,
+        out Vector3 tangent,
+        out Vector3 right,
+        out Vector3 up)
+    {
+        position = Vector3.zero;
+        tangent = Vector3.forward;
+        right = Vector3.right;
+        up = Vector3.up;
+
+        if (spline == null)
+        {
+            return false;
+        }
+
+        float normalizedT = state.NormalizedT;
+        position = spline.GetPoint(normalizedT);
+
+        tangent = spline.GetTangent(normalizedT);
+        if (tangent.sqrMagnitude > 0.0001f)
+        {
+            tangent.Normalize();
+            if (!_movingForward)
+            {
+                tangent = -tangent;
+            }
+        }
+        else
+        {
+            tangent = Vector3.forward;
+        }
+
+        Vector3 normal = spline.GetNormal(normalizedT);
+        if (normal.sqrMagnitude < 0.0001f)
+        {
+            normal = Vector3.up;
+        }
+        else
+        {
+            normal.Normalize();
+        }
+
+        right = Vector3.Cross(normal, tangent);
+        if (right.sqrMagnitude < 0.0001f)
+        {
+            right = Vector3.Cross(Vector3.up, tangent);
+        }
+
+        right.Normalize();
+        up = Vector3.Cross(tangent, right).normalized;
+        return true;
+    }
+
+    private void ScheduleNextSpawn()
+    {
+        _nextSpawnTime = Time.time + Random.Range(spawnMinInterval, spawnMaxInterval);
+    }
+
+    private static bool IsFollowerActive(Transform follower)
+    {
+        return follower != null && follower.gameObject.activeSelf;
+    }
+
     private void EnsureBuffers()
     {
-        while (_velocities.Count < followers.Count)
-        {
-            _velocities.Add(Vector3.zero);
-        }
-
-        if (_velocities.Count > followers.Count)
-        {
-            _velocities.RemoveRange(followers.Count, _velocities.Count - followers.Count);
-        }
-
-        while (_desiredPositions.Count < followers.Count)
-        {
-            _desiredPositions.Add(Vector3.zero);
-        }
-
-        if (_desiredPositions.Count > followers.Count)
-        {
-            _desiredPositions.RemoveRange(followers.Count, _desiredPositions.Count - followers.Count);
-        }
-
         while (_states.Count < followers.Count)
         {
-            _states.Add(CreateFollowerState(isCameraCurious: false));
+            _states.Add(CreateFollowerState(_nextSlotIndex));
+            _nextSlotIndex++;
         }
 
         if (_states.Count > followers.Count)
         {
             _states.RemoveRange(followers.Count, _states.Count - followers.Count);
-        }
-    }
-
-    private void ResetVelocities()
-    {
-        EnsureBuffers();
-        for (int i = 0; i < _velocities.Count; i++)
-        {
-            _velocities[i] = Vector3.zero;
         }
     }
 }
