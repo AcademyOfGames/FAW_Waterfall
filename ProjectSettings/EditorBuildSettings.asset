@@ -10,7 +10,7 @@ EditorBuildSettings:
     guid: 0463fa934a2cf4944a7bca8357863fdb
   - enabled: 1
     path: Assets/Scenes/DivineScene.unity
-    guid: 99c9720ab356a0642a771bea13969a05
+    guid: 05571857fe92a30469e705532a0a3ec3
   - enabled: 1
     path: Assets/Scenes/ChenoaScene.unity
     guid: 757ffdeed9915be479120827bb9783d6
