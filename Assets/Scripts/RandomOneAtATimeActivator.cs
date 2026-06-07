@@ -4,17 +4,41 @@ using UnityEngine;
 using UnityEngine.Serialization;
 
 /// <summary>
-/// Activates all targets in random order within a fixed duration.
-/// One target is activated immediately on start.
+/// Activates plant targets in random order, evenly spread across a fixed duration.
 /// After all targets are active and their animations are near completion,
 /// releases fish swarms through an orchestrator or a single follower component.
 /// </summary>
+[DefaultExecutionOrder(50)]
 public class RandomOneAtATimeActivator : MonoBehaviour
 {
     [SerializeField] private List<GameObject> targets = new List<GameObject>();
-    [SerializeField] private float totalDurationSeconds = 15f;
-    [SerializeField] private float minSwitchIntervalSeconds = 0.25f;
-    [SerializeField] private float maxSwitchIntervalSeconds = 1.5f;
+    [Tooltip("All targets are activated within this many seconds (even spacing + jitter).")]
+    [SerializeField] private float totalDurationSeconds = 70f;
+    [Tooltip("Minimum seconds between consecutive plant activations.")]
+    [SerializeField] private float minSwitchIntervalSeconds = 0.4f;
+    [Tooltip("Maximum random jitter added to each scheduled activation time.")]
+    [SerializeField] private float maxSwitchIntervalSeconds = 0.8f;
+
+    [Header("Plant Animation")]
+    [Tooltip("Rebind animators when each plant is enabled so the default grow clip starts from 0.")]
+    [SerializeField] private bool restartAnimatorOnActivate = true;
+
+    [Header("Plant Grow Audio")]
+    [Tooltip("Play a grow sound when each plant is activated (synced with grow animation restart).")]
+    [SerializeField] private bool playSoundOnPlantActivate = true;
+    [SerializeField] private AudioClip[] plantGrowSounds;
+    [Range(0f, 1f)]
+    [SerializeField] private float plantGrowSoundVolume = 1f;
+    [Range(0f, 1f)]
+    [Tooltip("0 = 2D, 1 = 3D at the plant position.")]
+    [SerializeField] private float plantGrowSoundSpatialBlend = 1f;
+
+    [Header("Plant Sway")]
+    [Tooltip("Adds PlantUnderwaterSway when each plant activates (rigid base-anchored wobble after grow).")]
+    [SerializeField] private bool enableUnderwaterSway = true;
+
+    [Header("River Ambience")]
+    [SerializeField] private ExperienceRiverAmbience riverAmbience;
 
     [Header("Fish Release")]
     [SerializeField] private SplineFishGroupOrchestrator fishOrchestrator;
@@ -29,16 +53,32 @@ public class RandomOneAtATimeActivator : MonoBehaviour
     [SerializeField] private int animatorLayer;
 
     private Coroutine _activationRoutine;
+    private bool _riverLeadInTriggered;
+
+    public IReadOnlyList<GameObject> PlantTargets => targets;
+
+    private void Awake()
+    {
+        if (riverAmbience == null)
+        {
+            riverAmbience = GetComponent<ExperienceRiverAmbience>();
+        }
+    }
 
     private void OnValidate()
     {
         totalDurationSeconds = Mathf.Max(0f, totalDurationSeconds);
         minSwitchIntervalSeconds = Mathf.Max(0f, minSwitchIntervalSeconds);
-        maxSwitchIntervalSeconds = Mathf.Max(minSwitchIntervalSeconds, maxSwitchIntervalSeconds);
+        maxSwitchIntervalSeconds = Mathf.Max(0f, maxSwitchIntervalSeconds);
         followerActivateStaggerSeconds = Mathf.Max(0f, followerActivateStaggerSeconds);
         extraFishStartDelaySeconds = Mathf.Max(0f, extraFishStartDelaySeconds);
         animationLeadTimeSeconds = Mathf.Max(0f, animationLeadTimeSeconds);
         animatorLayer = Mathf.Max(0, animatorLayer);
+        plantGrowSoundVolume = Mathf.Clamp01(plantGrowSoundVolume);
+        plantGrowSoundSpatialBlend = Mathf.Clamp01(plantGrowSoundSpatialBlend);
+#if UNITY_EDITOR
+        TryAssignDefaultPlantGrowSoundsInEditor();
+#endif
     }
 
     private void Start()
@@ -53,48 +93,12 @@ public class RandomOneAtATimeActivator : MonoBehaviour
 
     private IEnumerator ActivateRandomlyOverTime()
     {
+        _riverLeadInTriggered = false;
         List<GameObject> validTargets = GetValidTargets();
         if (validTargets.Count > 0)
         {
-            List<GameObject> pendingTargets = new List<GameObject>(validTargets);
-            ActivateRandomPending(pendingTargets);
-
-            float elapsed = 0f;
-            float minInterval = Mathf.Max(0f, minSwitchIntervalSeconds);
-            float maxInterval = Mathf.Max(minInterval, maxSwitchIntervalSeconds);
-
-            while (pendingTargets.Count > 0 && elapsed < totalDurationSeconds)
-            {
-                float remainingTime = totalDurationSeconds - elapsed;
-                int activationsLeftAfterThisWait = pendingTargets.Count - 1;
-                float minWaitNeededNow = Mathf.Max(0f, remainingTime - (activationsLeftAfterThisWait * maxInterval));
-                float maxWaitAllowedNow = Mathf.Max(0f, remainingTime - (activationsLeftAfterThisWait * minInterval));
-
-                float waitLowerBound = Mathf.Min(maxWaitAllowedNow, Mathf.Max(minInterval, minWaitNeededNow));
-                float waitUpperBound = Mathf.Min(maxInterval, maxWaitAllowedNow);
-                if (waitUpperBound < waitLowerBound)
-                {
-                    waitLowerBound = waitUpperBound;
-                }
-
-                float waitTime = waitUpperBound > waitLowerBound
-                    ? Random.Range(waitLowerBound, waitUpperBound)
-                    : waitLowerBound;
-
-                yield return new WaitForSeconds(waitTime);
-                elapsed += waitTime;
-
-                if (elapsed <= totalDurationSeconds && pendingTargets.Count > 0)
-                {
-                    ActivateRandomPending(pendingTargets);
-                }
-            }
-
-            while (pendingTargets.Count > 0)
-            {
-                ActivateRandomPending(pendingTargets);
-                yield return null;
-            }
+            Shuffle(validTargets);
+            yield return ActivateOnSchedule(validTargets);
         }
 
         yield return WaitUntilAnimationsNearFinish(validTargets);
@@ -102,10 +106,42 @@ public class RandomOneAtATimeActivator : MonoBehaviour
         _activationRoutine = null;
     }
 
+    private IEnumerator ActivateOnSchedule(List<GameObject> orderedTargets)
+    {
+        int count = orderedTargets.Count;
+        float duration = Mathf.Max(0f, totalDurationSeconds);
+        float minGap = minSwitchIntervalSeconds;
+        float maxJitter = maxSwitchIntervalSeconds;
+        float startTime = Time.time;
+        float previousScheduledTime = -minGap;
+
+        for (int i = 0; i < count; i++)
+        {
+            float slotTime = count <= 1 ? 0f : (i / (float)(count - 1)) * duration;
+            if (i > 0 && maxJitter > 0f)
+            {
+                slotTime += Random.Range(-maxJitter, maxJitter);
+            }
+
+            slotTime = Mathf.Clamp(slotTime, 0f, duration);
+            slotTime = Mathf.Max(slotTime, previousScheduledTime + minGap);
+            previousScheduledTime = slotTime;
+
+            float waitSeconds = slotTime - (Time.time - startTime);
+            if (waitSeconds > 0f)
+            {
+                yield return new WaitForSeconds(waitSeconds);
+            }
+
+            ActivateTarget(orderedTargets[i], i);
+        }
+    }
+
     private IEnumerator WaitUntilAnimationsNearFinish(List<GameObject> validTargets)
     {
         if (validTargets == null || validTargets.Count == 0 || animationLeadTimeSeconds <= 0f)
         {
+            TryBeginRiverLeadIn();
             yield break;
         }
 
@@ -113,37 +149,76 @@ public class RandomOneAtATimeActivator : MonoBehaviour
 
         while (true)
         {
-            float maxRemainingSeconds = 0f;
-            bool hasAnimator = false;
+            float maxRemainingSeconds = GetMaxAnimationRemainingSeconds(validTargets);
+            bool hasAnimator = maxRemainingSeconds >= 0f;
 
-            for (int i = 0; i < validTargets.Count; i++)
-            {
-                GameObject target = validTargets[i];
-                if (target == null || !target.activeInHierarchy)
-                {
-                    continue;
-                }
-
-                Animator animator = target.GetComponentInChildren<Animator>(true);
-                if (animator == null || !animator.isActiveAndEnabled)
-                {
-                    continue;
-                }
-
-                hasAnimator = true;
-                maxRemainingSeconds = Mathf.Max(
-                    maxRemainingSeconds,
-                    GetAnimationRemainingSeconds(animator, animatorLayer)
-                );
-            }
+            TryBeginRiverLeadIn(maxRemainingSeconds, hasAnimator);
 
             if (!hasAnimator || maxRemainingSeconds <= animationLeadTimeSeconds)
             {
+                TryBeginRiverLeadIn();
                 yield break;
             }
 
             yield return null;
         }
+    }
+
+    private float GetMaxAnimationRemainingSeconds(List<GameObject> validTargets)
+    {
+        float maxRemainingSeconds = -1f;
+
+        for (int i = 0; i < validTargets.Count; i++)
+        {
+            GameObject target = validTargets[i];
+            if (target == null || !target.activeInHierarchy)
+            {
+                continue;
+            }
+
+            Animator animator = target.GetComponentInChildren<Animator>(true);
+            if (animator == null || !animator.isActiveAndEnabled)
+            {
+                continue;
+            }
+
+            maxRemainingSeconds = Mathf.Max(
+                maxRemainingSeconds,
+                GetAnimationRemainingSeconds(animator, animatorLayer)
+            );
+        }
+
+        return maxRemainingSeconds;
+    }
+
+    private void TryBeginRiverLeadIn(float maxRemainingSeconds, bool hasAnimator)
+    {
+        if (_riverLeadInTriggered || riverAmbience == null)
+        {
+            return;
+        }
+
+        if (!hasAnimator)
+        {
+            return;
+        }
+
+        float leadThreshold = animationLeadTimeSeconds + riverAmbience.LeadSecondsBeforeFish;
+        if (maxRemainingSeconds <= leadThreshold)
+        {
+            TryBeginRiverLeadIn();
+        }
+    }
+
+    private void TryBeginRiverLeadIn()
+    {
+        if (_riverLeadInTriggered || riverAmbience == null)
+        {
+            return;
+        }
+
+        _riverLeadInTriggered = true;
+        riverAmbience.BeginFadeIn();
     }
 
     private static float GetAnimationRemainingSeconds(Animator animator, int layer)
@@ -187,6 +262,8 @@ public class RandomOneAtATimeActivator : MonoBehaviour
 
     private IEnumerator StartFishAfterTargetsActivated()
     {
+        TryBeginRiverLeadIn();
+
         if (extraFishStartDelaySeconds > 0f)
         {
             yield return new WaitForSeconds(extraFishStartDelaySeconds);
@@ -195,6 +272,12 @@ public class RandomOneAtATimeActivator : MonoBehaviour
         if (fishOrchestrator != null)
         {
             fishOrchestrator.StartSequence();
+            riverAmbience?.BeginExperienceEndMonitoring(
+                fishOrchestrator,
+                null,
+                followerActivateStaggerSeconds,
+                extraFishStartDelaySeconds
+            );
             yield break;
         }
 
@@ -202,6 +285,12 @@ public class RandomOneAtATimeActivator : MonoBehaviour
         {
             vertexPathSwarmFollower.ActivateFollowersAndStartSwarm(
                 Mathf.Max(0f, followerActivateStaggerSeconds)
+            );
+            riverAmbience?.BeginExperienceEndMonitoring(
+                null,
+                vertexPathSwarmFollower,
+                followerActivateStaggerSeconds,
+                extraFishStartDelaySeconds
             );
         }
     }
@@ -220,16 +309,116 @@ public class RandomOneAtATimeActivator : MonoBehaviour
         return validTargets;
     }
 
-    private void ActivateRandomPending(List<GameObject> pendingTargets)
+    private void ActivateTarget(GameObject target, int activationIndex)
     {
-        if (pendingTargets.Count == 0)
+        if (target == null)
         {
             return;
         }
 
-        int nextIndex = Random.Range(0, pendingTargets.Count);
-        GameObject nextTarget = pendingTargets[nextIndex];
-        pendingTargets.RemoveAt(nextIndex);
-        nextTarget.SetActive(true);
+        bool wasAlreadyActive = target.activeSelf;
+        target.SetActive(true);
+
+        if (restartAnimatorOnActivate && !wasAlreadyActive)
+        {
+            Animator[] animators = target.GetComponentsInChildren<Animator>(true);
+            for (int i = 0; i < animators.Length; i++)
+            {
+                Animator animator = animators[i];
+                if (animator == null)
+                {
+                    continue;
+                }
+
+                animator.enabled = true;
+                animator.Rebind();
+                animator.Update(0f);
+            }
+        }
+
+        PlayPlantGrowSound(target, activationIndex);
+        EnsureUnderwaterSway(target);
     }
+
+    private void EnsureUnderwaterSway(GameObject target)
+    {
+        if (!enableUnderwaterSway || target == null)
+        {
+            return;
+        }
+
+        if (target.GetComponent<PlantUnderwaterSway>() == null)
+        {
+            target.AddComponent<PlantUnderwaterSway>();
+        }
+    }
+
+    private void PlayPlantGrowSound(GameObject target, int activationIndex)
+    {
+        if (!playSoundOnPlantActivate || plantGrowSounds == null || plantGrowSounds.Length == 0)
+        {
+            return;
+        }
+
+        AudioClip clip = plantGrowSounds[activationIndex % plantGrowSounds.Length];
+        if (clip == null)
+        {
+            return;
+        }
+
+        Vector3 position = GetPlantAudioPosition(target);
+        PlantGrowAudioPool.Play(position, clip, plantGrowSoundVolume, plantGrowSoundSpatialBlend);
+    }
+
+    private static Vector3 GetPlantAudioPosition(GameObject target)
+    {
+        Renderer renderer = target.GetComponentInChildren<Renderer>(true);
+        if (renderer != null)
+        {
+            return renderer.bounds.center;
+        }
+
+        return target.transform.position;
+    }
+
+    private static void Shuffle(List<GameObject> list)
+    {
+        for (int i = list.Count - 1; i > 0; i--)
+        {
+            int swapIndex = Random.Range(0, i + 1);
+            (list[i], list[swapIndex]) = (list[swapIndex], list[i]);
+        }
+    }
+
+#if UNITY_EDITOR
+    private const string PlantGrowSoundsFolder = "Assets/_artAssets/Alina/sound";
+
+    private void TryAssignDefaultPlantGrowSoundsInEditor()
+    {
+        if (plantGrowSounds != null && plantGrowSounds.Length > 0)
+        {
+            return;
+        }
+
+        string[] guids = UnityEditor.AssetDatabase.FindAssets("t:AudioClip", new[] { PlantGrowSoundsFolder });
+        if (guids.Length == 0)
+        {
+            return;
+        }
+
+        var clips = new List<AudioClip>(guids.Length);
+        for (int i = 0; i < guids.Length; i++)
+        {
+            string path = UnityEditor.AssetDatabase.GUIDToAssetPath(guids[i]);
+            AudioClip clip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>(path);
+            if (clip != null && clip.name.IndexOf("River", System.StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                clips.Add(clip);
+            }
+        }
+
+        clips.Sort((a, b) => string.CompareOrdinal(a.name, b.name));
+        plantGrowSounds = clips.ToArray();
+    }
+#endif
 }

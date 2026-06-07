@@ -13,7 +13,7 @@ PlayerSettings:
   useOnDemandResources: 0
   accelerometerFrequency: 60
   companyName: FutureArts
-  productName: FutureArtsWay
+  productName: FutureArtsWay_AlinaGroundTracking
   defaultCursor: {fileID: 0}
   cursorHotspot: {x: 0, y: 0}
   m_SplashScreenBackgroundColor: {r: 0.13725491, g: 0.12156863, b: 0.1254902, a: 1}
@@ -144,6 +144,10 @@ PlayerSettings:
   bundleVersion: 1.6
   preloadedAssets:
   - {fileID: 0}
+  - {fileID: -1523886337182523732, guid: 4ce52f3b88187134f8374d286a442d26, type: 2}
+  - {fileID: 11400000, guid: 4d85da1eace0d5b40b3e126900036b58, type: 2}
+  - {fileID: 4800000, guid: c9f956787b1d945e7b36e0516201fc76, type: 3}
+  - {fileID: 4800000, guid: 0945859e5a1034c2cb6dce53cb4fb899, type: 3}
   - {fileID: 11400000, guid: 6ba5db84343ecbe4da8296ca1603aac2, type: 2}
   metroInputSource: 0
   wsaTransparentSwapchain: 0
