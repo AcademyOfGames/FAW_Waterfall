@@ -777,6 +777,7 @@ MonoBehaviour:
   horizontalGoodThresholdMeters: 10
   horizontalExcellentThresholdMeters: 4
   checkVpsAvailability: 1
+  logAnchorDistance: 1
 --- !u!1 &757818634
 GameObject:
   m_ObjectHideFlags: 0
@@ -1562,6 +1563,11 @@ PrefabInstance:
     serializedVersion: 3
     m_TransformParent: {fileID: 233903133}
     m_Modifications:
+    - target: {fileID: 22684908039426850, guid: 1a10c1101de2dfd41afec3c8bb705561,
+        type: 3}
+      propertyPath: m_precedingControlPointPosition.z
+      value: 0.01294929
+      objectReference: {fileID: 0}
     - target: {fileID: 57091374973677023, guid: 1a10c1101de2dfd41afec3c8bb705561,
         type: 3}
       propertyPath: m_IsActive
@@ -1612,6 +1618,16 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 1988979969274169349, guid: 1a10c1101de2dfd41afec3c8bb705561,
+        type: 3}
+      propertyPath: m_followingControlPointPosition.z
+      value: 1.5912546
+      objectReference: {fileID: 0}
+    - target: {fileID: 1988979969274169349, guid: 1a10c1101de2dfd41afec3c8bb705561,
+        type: 3}
+      propertyPath: m_precedingControlPointPosition.z
+      value: -3.5988698
+      objectReference: {fileID: 0}
     - target: {fileID: 3165042387604043895, guid: 1a10c1101de2dfd41afec3c8bb705561,
         type: 3}
       propertyPath: m_IsActive
@@ -1621,6 +1637,16 @@ PrefabInstance:
         type: 3}
       propertyPath: m_IsActive
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 3347380859306121523, guid: 1a10c1101de2dfd41afec3c8bb705561,
+        type: 3}
+      propertyPath: m_position.z
+      value: -0.00000094434847
+      objectReference: {fileID: 0}
+    - target: {fileID: 3604566951093295629, guid: 1a10c1101de2dfd41afec3c8bb705561,
+        type: 3}
+      propertyPath: m_precedingControlPointPosition.y
+      value: 0.0119546065
       objectReference: {fileID: 0}
     - target: {fileID: 3898081818058358272, guid: 1a10c1101de2dfd41afec3c8bb705561,
         type: 3}
@@ -1636,6 +1662,11 @@ PrefabInstance:
         type: 3}
       propertyPath: m_IsActive
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 4261754007810443217, guid: 1a10c1101de2dfd41afec3c8bb705561,
+        type: 3}
+      propertyPath: m_followingControlPointPosition.x
+      value: -0.5561706
       objectReference: {fileID: 0}
     - target: {fileID: 4457548153534324010, guid: 1a10c1101de2dfd41afec3c8bb705561,
         type: 3}
@@ -1761,6 +1792,16 @@ PrefabInstance:
         type: 3}
       propertyPath: m_IsActive
       value: 0
+      objectReference: {fileID: 0}
+    - target: {fileID: 7762369655424066707, guid: 1a10c1101de2dfd41afec3c8bb705561,
+        type: 3}
+      propertyPath: m_precedingControlPointPosition.x
+      value: 1.6572535
+      objectReference: {fileID: 0}
+    - target: {fileID: 7863416098617452891, guid: 1a10c1101de2dfd41afec3c8bb705561,
+        type: 3}
+      propertyPath: m_followingControlPointPosition.y
+      value: -0.8649626
       objectReference: {fileID: 0}
     - target: {fileID: 8082443573370332979, guid: 1a10c1101de2dfd41afec3c8bb705561,
         type: 3}

@@ -9,6 +9,37 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class PlantUnderwaterSway : MonoBehaviour
 {
+    [System.Serializable]
+    public struct SwayDefaults
+    {
+        [Tooltip("Blend from grow pose and ramp sway amplitude over this duration.")]
+        public float poseHandoffSeconds;
+        public float primarySwayAngleDegrees;
+        [Range(0f, 1f)]
+        public float secondarySwayAngleFactor;
+        public float swaySpeed;
+        public float secondarySwaySpeedFactor;
+        [Tooltip("Wait until the grow clip finishes before swaying.")]
+        public bool waitForGrowthComplete;
+        public int animatorLayer;
+        public bool disableAnimatorAfterGrowth;
+
+        public static SwayDefaults CreateBuiltIn()
+        {
+            return new SwayDefaults
+            {
+                poseHandoffSeconds = 1.5f,
+                primarySwayAngleDegrees = 3.5f,
+                secondarySwayAngleFactor = 0.4f,
+                swaySpeed = 0.6f,
+                secondarySwaySpeedFactor = 1.17f,
+                waitForGrowthComplete = true,
+                animatorLayer = 0,
+                disableAnimatorAfterGrowth = true,
+            };
+        }
+    }
+
     [Header("Timing")]
     [Tooltip("Wait until the default-layer grow clip has finished before swaying.")]
     [SerializeField] private bool waitForGrowthComplete = true;
@@ -38,7 +69,7 @@ public class PlantUnderwaterSway : MonoBehaviour
     [Tooltip("Disable Animator after growth so procedural sway is not overwritten.")]
     [SerializeField] private bool disableAnimatorAfterGrowth = true;
     [Tooltip("Blend from final grow geometry pose into sway rest pose, and ramp sway amplitude over this duration.")]
-    [SerializeField] private float poseHandoffSeconds = 0.45f;
+    [SerializeField] private float poseHandoffSeconds = 1.5f;
 
     private Animator _animator;
     private float _runtimePhase;
@@ -90,6 +121,40 @@ public class PlantUnderwaterSway : MonoBehaviour
     {
         StopWaiting();
         _swayActive = false;
+    }
+
+    public void ApplyDefaults(SwayDefaults defaults)
+    {
+        poseHandoffSeconds = Mathf.Max(0f, defaults.poseHandoffSeconds);
+        primarySwayAngleDegrees = Mathf.Max(0f, defaults.primarySwayAngleDegrees);
+        secondarySwayAngleFactor = Mathf.Clamp01(defaults.secondarySwayAngleFactor);
+        swaySpeed = Mathf.Max(0f, defaults.swaySpeed);
+        secondarySwaySpeedFactor = Mathf.Max(0f, defaults.secondarySwaySpeedFactor);
+        waitForGrowthComplete = defaults.waitForGrowthComplete;
+        animatorLayer = Mathf.Max(0, defaults.animatorLayer);
+        disableAnimatorAfterGrowth = defaults.disableAnimatorAfterGrowth;
+    }
+
+    public static PlantUnderwaterSway EnsureConfigured(GameObject plant, SwayDefaults defaults, bool enabled)
+    {
+        if (!enabled || plant == null)
+        {
+            return null;
+        }
+
+        PlantUnderwaterSway sway = plant.GetComponent<PlantUnderwaterSway>();
+        if (sway == null)
+        {
+            sway = plant.AddComponent<PlantUnderwaterSway>();
+        }
+
+        sway.ApplyDefaults(defaults);
+        if (plant.activeInHierarchy)
+        {
+            sway.BeginAfterGrowth();
+        }
+
+        return sway;
     }
 
     /// <summary>Call when the plant is activated (e.g. from RandomOneAtATimeActivator).</summary>

@@ -36,9 +36,15 @@ public class ViewerFishEncounterController : MonoBehaviour
     [Tooltip("Target scale factor relative to each fish's size at handoff (0.5 = half size).")]
     [Range(0.01f, 1f)]
     [SerializeField] private float encounterTargetScaleFactor = 0.5f;
+    [Tooltip("Spread Stage 4 disappearances over this many meters before the path end (rearmost fish first).")]
+    [SerializeField] private float encounterEndDissolveSpreadMeters = 6f;
+    [Tooltip("Seconds for each fish to shrink out once its dissolve point is reached.")]
+    [SerializeField] private float encounterEndPopDurationSeconds = 0.75f;
+    [Tooltip("Meters per second along the Stage 4 spiral and bridge transit (independent of Stage 3 speed).")]
+    [SerializeField] private float stage4PathSpeed = 4f;
 
     [Header("Stage 4 join homing")]
-    [SerializeField] private float stage4HomingSpeed = 10f;
+    [SerializeField] private float stage4HomingSpeed = 5f;
     [SerializeField] private float stage4JoinDistance = 0.75f;
     [SerializeField] private float stage4JoinTimeoutSeconds = 15f;
     [SerializeField] private float stage4HomingTurnSpeed = 8f;
@@ -64,6 +70,9 @@ public class ViewerFishEncounterController : MonoBehaviour
         maxWaitForJunctionSeconds = Mathf.Max(1f, maxWaitForJunctionSeconds);
         encounterScaleDurationSeconds = Mathf.Max(0.01f, encounterScaleDurationSeconds);
         encounterTargetScaleFactor = Mathf.Clamp(encounterTargetScaleFactor, 0.01f, 1f);
+        encounterEndDissolveSpreadMeters = Mathf.Max(0f, encounterEndDissolveSpreadMeters);
+        encounterEndPopDurationSeconds = Mathf.Max(0.05f, encounterEndPopDurationSeconds);
+        stage4PathSpeed = Mathf.Max(0.1f, stage4PathSpeed);
         stage4HomingSpeed = Mathf.Max(0.1f, stage4HomingSpeed);
         stage4JoinDistance = Mathf.Max(0.01f, stage4JoinDistance);
         stage4JoinTimeoutSeconds = Mathf.Max(0.5f, stage4JoinTimeoutSeconds);
@@ -147,9 +156,12 @@ public class ViewerFishEncounterController : MonoBehaviour
             pathEndScaleFactor: 0f,
             encounterPathStartNormalizedT: stage4JunctionT,
             preserveFishScale: false,
-            encounterScaleDurationSeconds: encounterScaleDurationSeconds);
+            encounterScaleDurationSeconds: encounterScaleDurationSeconds,
+            encounterEndDissolveSpreadMeters: encounterEndDissolveSpreadMeters,
+            encounterEndPopDurationSeconds: encounterEndPopDurationSeconds);
 
         ConfigureStage4Homing(stage4Convoy);
+        stage4Convoy.SetPathSpeed(stage4PathSpeed);
 
         if (!TrySetupBridgeSwarms(groupB, stage4Spline, stage4JunctionT))
         {
@@ -185,7 +197,8 @@ public class ViewerFishEncounterController : MonoBehaviour
 
                 if (!motionSynced)
                 {
-                    stage4Convoy.SyncConvoyMotionFrom(sourceSwarm);
+                    stage4Convoy.SyncConvoySpacingFrom(sourceSwarm);
+                    stage4Convoy.SetPathSpeed(stage4PathSpeed);
                     motionSynced = true;
                 }
 
@@ -321,7 +334,7 @@ public class ViewerFishEncounterController : MonoBehaviour
             VertexPathSwarmFollower bridgeSwarm = bridgeGo.AddComponent<VertexPathSwarmFollower>();
             bridgeSwarm.BeginBridgeTransit(
                 bridgeSpline,
-                sourceSwarm.PathSpeed,
+                stage4PathSpeed,
                 sourceSwarm.FishSpacing);
 
             bridgeGo.SetActive(true);

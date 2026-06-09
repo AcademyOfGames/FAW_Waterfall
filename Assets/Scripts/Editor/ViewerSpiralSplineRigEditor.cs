@@ -9,7 +9,6 @@ public class ViewerSpiralSplineRigEditor : Editor
         DrawDefaultInspector();
 
         var rig = (ViewerSpiralSplineRig)target;
-        Stage4EncounterPathEditorBootstrap.EnsureRigVisibleInEditMode(rig);
         EditorGUILayout.Space();
 
         EditorGUILayout.BeginHorizontal();
@@ -47,7 +46,7 @@ public class ViewerSpiralSplineRigEditor : Editor
         else if (rig.HasManualSplinePoints())
         {
             EditorGUILayout.HelpBox(
-                "Spline points exist but Use Manual Spline Points is off. Play mode will still keep saved points. Enable manual to prevent accidental procedural rebuilds from the Preview button.",
+                "Spline points exist but Use Manual Spline Points is off. Enable manual to keep hand-edited points across sessions. Preview buttons always replace the current path.",
                 MessageType.Warning);
         }
         else

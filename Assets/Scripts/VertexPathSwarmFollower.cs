@@ -48,14 +48,16 @@ public class VertexPathSwarmFollower : MonoBehaviour
 
     private const int PathSampleAccuracy = 12;
     private const float EncounterPathEndThreshold = 0.999f;
-    private const float EncounterEndPopDuration = 0.25f;
+    private const float DefaultEncounterEndPopDuration = 0.75f;
+    private const float DefaultEncounterEndDissolveSpreadMeters = 6f;
+    private const float DefaultEncounterEndMinArcMeters = 0.35f;
 
     [SerializeField] private List<Transform> followers = new List<Transform>();
     [SerializeField] private BezierSpline spline;
 
     [Header("Path")]
     [SerializeField] private TravelMode travelMode = TravelMode.Loop;
-    [SerializeField] private float pathSpeed = 12f;
+    [SerializeField] private float pathSpeed = 4f;
     [Range(0f, 1f)]
     [SerializeField] private float startNormalizedT;
 
@@ -133,6 +135,9 @@ public class VertexPathSwarmFollower : MonoBehaviour
     private float _encounterEndScaleFactor;
     private float _encounterScaleDurationSeconds;
     private float _encounterPathStartNormalizedT;
+    private float _encounterEndDissolveSpreadMeters = DefaultEncounterEndDissolveSpreadMeters;
+    private float _encounterEndPopDuration = DefaultEncounterEndPopDuration;
+    private float _encounterEndMinArcMeters = DefaultEncounterEndMinArcMeters;
     private float _encounterLeadNormalizedT = -1f;
     private float _encounterConvoyFrontT;
     private bool _encounterConvoyFrontActive;
@@ -168,6 +173,11 @@ public class VertexPathSwarmFollower : MonoBehaviour
     public float FishSpacing => fishSpacing;
     public float PathSpeed => pathSpeed;
     public float HeadGap => headGap;
+
+    public void SetPathSpeed(float speed)
+    {
+        pathSpeed = Mathf.Max(0.1f, speed);
+    }
 
     public event System.Action SwarmStarted;
 
@@ -656,17 +666,22 @@ public class VertexPathSwarmFollower : MonoBehaviour
         return false;
     }
 
-    /// <summary>Copies path speed and spacing so a peeled convoy keeps the same train rhythm.</summary>
-    public void SyncConvoyMotionFrom(VertexPathSwarmFollower source)
+    /// <summary>Copies spacing so a peeled convoy keeps the same train rhythm (speed is set separately for Stage 4).</summary>
+    public void SyncConvoySpacingFrom(VertexPathSwarmFollower source)
     {
         if (source == null)
         {
             return;
         }
 
-        pathSpeed = Mathf.Max(0.1f, source.PathSpeed);
         fishSpacing = Mathf.Max(0.05f, source.FishSpacing);
         headGap = Mathf.Max(0f, source.HeadGap);
+    }
+
+    /// <summary>Legacy alias — copies spacing only; does not overwrite path speed.</summary>
+    public void SyncConvoyMotionFrom(VertexPathSwarmFollower source)
+    {
+        SyncConvoySpacingFrom(source);
     }
 
     /// <summary>Removes a follower and returns preserved state for Stage 4 handoff.</summary>
@@ -749,7 +764,9 @@ public class VertexPathSwarmFollower : MonoBehaviour
         float pathEndScaleFactor = 0f,
         float encounterPathStartNormalizedT = 0f,
         bool preserveFishScale = false,
-        float encounterScaleDurationSeconds = -1f)
+        float encounterScaleDurationSeconds = -1f,
+        float encounterEndDissolveSpreadMeters = DefaultEncounterEndDissolveSpreadMeters,
+        float encounterEndPopDurationSeconds = DefaultEncounterEndPopDuration)
     {
         CancelDelayedStart();
         StopEncounterHoming();
@@ -774,6 +791,9 @@ public class VertexPathSwarmFollower : MonoBehaviour
             ? 0f
             : Mathf.Max(0f, encounterScaleDurationSeconds);
         _encounterPathStartNormalizedT = Mathf.Clamp01(encounterPathStartNormalizedT);
+        _encounterEndDissolveSpreadMeters = Mathf.Max(0f, encounterEndDissolveSpreadMeters);
+        _encounterEndPopDuration = Mathf.Max(0.05f, encounterEndPopDurationSeconds);
+        _encounterEndMinArcMeters = DefaultEncounterEndMinArcMeters;
         _encounterLeadNormalizedT = -1f;
         _encounterConvoyFrontActive = false;
         _isEncounterConvoy = true;
@@ -1844,6 +1864,86 @@ public class VertexPathSwarmFollower : MonoBehaviour
         return state != null && state.NormalizedT >= EncounterPathEndThreshold;
     }
 
+    private float GetArcDistanceToEncounterPathEnd(float normalizedT)
+    {
+        if (spline == null)
+        {
+            return float.MaxValue;
+        }
+
+        float clampedT = Mathf.Clamp01(normalizedT);
+        if (clampedT >= EncounterPathEndThreshold)
+        {
+            return 0f;
+        }
+
+        return spline.GetLengthApproximately(clampedT, 1f, PathSampleAccuracy * 4);
+    }
+
+    private int GetEncounterTrailRank(int followerIndex)
+    {
+        if (!IsValidFollowerIndex(followerIndex) || _states[followerIndex] == null)
+        {
+            return 0;
+        }
+
+        int mySlot = _states[followerIndex].SlotIndex;
+        int rank = 0;
+        for (int i = 0; i < followers.Count; i++)
+        {
+            if (i == followerIndex || _pendingHomingIndices.Contains(i))
+            {
+                continue;
+            }
+
+            FollowerState state = _states[i];
+            if (state == null || state.EncounterFinished || !IsFollowerActive(followers[i]))
+            {
+                continue;
+            }
+
+            if (state.SlotIndex < mySlot)
+            {
+                rank++;
+            }
+        }
+
+        return rank;
+    }
+
+    private float GetEncounterDissolveTriggerArc(int trailRank)
+    {
+        if (_encounterEndDissolveSpreadMeters <= 0f)
+        {
+            return 0f;
+        }
+
+        if (trailRank <= 0)
+        {
+            return _encounterEndMinArcMeters;
+        }
+
+        float stagger = trailRank * Mathf.Max(fishSpacing, 0.25f);
+        return Mathf.Min(stagger, _encounterEndDissolveSpreadMeters);
+    }
+
+    private bool HasReachedEncounterDissolvePoint(FollowerState state, int followerIndex)
+    {
+        if (state == null)
+        {
+            return false;
+        }
+
+        if (_encounterEndDissolveSpreadMeters <= 0f)
+        {
+            return HasReachedPathEnd(state);
+        }
+
+        float arcToEnd = GetArcDistanceToEncounterPathEnd(state.NormalizedT);
+        int trailRank = GetEncounterTrailRank(followerIndex);
+        return arcToEnd <= GetEncounterDissolveTriggerArc(trailRank);
+    }
+
     private void Update()
     {
         if (spline == null)
@@ -2033,7 +2133,7 @@ public class VertexPathSwarmFollower : MonoBehaviour
                 continue;
             }
 
-            if (!HasReachedPathEnd(state))
+            if (!HasReachedEncounterDissolvePoint(state, i))
             {
                 continue;
             }
@@ -3156,7 +3256,7 @@ public class VertexPathSwarmFollower : MonoBehaviour
 
             if (state.EndShrinkStartTime >= 0f)
             {
-                float shrinkT = Mathf.Clamp01((Time.time - state.EndShrinkStartTime) / EncounterEndPopDuration);
+                float shrinkT = Mathf.Clamp01((Time.time - state.EndShrinkStartTime) / _encounterEndPopDuration);
                 return Mathf.Lerp(
                     state.EndShrinkFromMultiplier,
                     _encounterEndScaleFactor,

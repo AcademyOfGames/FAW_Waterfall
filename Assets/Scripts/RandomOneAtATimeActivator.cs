@@ -28,7 +28,7 @@ public class RandomOneAtATimeActivator : MonoBehaviour
     [SerializeField] private bool playSoundOnPlantActivate = true;
     [SerializeField] private AudioClip[] plantGrowSounds;
     [Range(0f, 1f)]
-    [SerializeField] private float plantGrowSoundVolume = 1f;
+    [SerializeField] private float plantGrowSoundVolume = 0.3f;
     [Range(0f, 1f)]
     [Tooltip("0 = 2D, 1 = 3D at the plant position.")]
     [SerializeField] private float plantGrowSoundSpatialBlend = 1f;
@@ -36,6 +36,7 @@ public class RandomOneAtATimeActivator : MonoBehaviour
     [Header("Plant Sway")]
     [Tooltip("Adds PlantUnderwaterSway when each plant activates (rigid base-anchored wobble after grow).")]
     [SerializeField] private bool enableUnderwaterSway = true;
+    [SerializeField] private PlantUnderwaterSway.SwayDefaults underwaterSwayDefaults = PlantUnderwaterSway.SwayDefaults.CreateBuiltIn();
 
     [Header("River Ambience")]
     [SerializeField] private ExperienceRiverAmbience riverAmbience;
@@ -56,6 +57,12 @@ public class RandomOneAtATimeActivator : MonoBehaviour
     private bool _riverLeadInTriggered;
 
     public IReadOnlyList<GameObject> PlantTargets => targets;
+    public PlantUnderwaterSway.SwayDefaults UnderwaterSwayDefaults => underwaterSwayDefaults;
+
+    public void ConfigureUnderwaterSway(GameObject target)
+    {
+        PlantUnderwaterSway.EnsureConfigured(target, underwaterSwayDefaults, enableUnderwaterSway);
+    }
 
     private void Awake()
     {
@@ -76,6 +83,12 @@ public class RandomOneAtATimeActivator : MonoBehaviour
         animatorLayer = Mathf.Max(0, animatorLayer);
         plantGrowSoundVolume = Mathf.Clamp01(plantGrowSoundVolume);
         plantGrowSoundSpatialBlend = Mathf.Clamp01(plantGrowSoundSpatialBlend);
+        if (underwaterSwayDefaults.poseHandoffSeconds <= 0f && underwaterSwayDefaults.primarySwayAngleDegrees <= 0f)
+        {
+            underwaterSwayDefaults = PlantUnderwaterSway.SwayDefaults.CreateBuiltIn();
+        }
+
+        ValidateSwayDefaults(ref underwaterSwayDefaults);
 #if UNITY_EDITOR
         TryAssignDefaultPlantGrowSoundsInEditor();
 #endif
@@ -218,7 +231,7 @@ public class RandomOneAtATimeActivator : MonoBehaviour
         }
 
         _riverLeadInTriggered = true;
-        riverAmbience.BeginFadeIn();
+        riverAmbience.BeginFadeIn(); // river + Ethereal shimmer background together
     }
 
     private static float GetAnimationRemainingSeconds(Animator animator, int layer)
@@ -272,6 +285,7 @@ public class RandomOneAtATimeActivator : MonoBehaviour
         if (fishOrchestrator != null)
         {
             fishOrchestrator.StartSequence();
+            riverAmbience?.BeginStage2Ambience();
             riverAmbience?.BeginExperienceEndMonitoring(
                 fishOrchestrator,
                 null,
@@ -286,6 +300,7 @@ public class RandomOneAtATimeActivator : MonoBehaviour
             vertexPathSwarmFollower.ActivateFollowersAndStartSwarm(
                 Mathf.Max(0f, followerActivateStaggerSeconds)
             );
+            riverAmbience?.BeginStage2Ambience();
             riverAmbience?.BeginExperienceEndMonitoring(
                 null,
                 vertexPathSwarmFollower,
@@ -342,15 +357,17 @@ public class RandomOneAtATimeActivator : MonoBehaviour
 
     private void EnsureUnderwaterSway(GameObject target)
     {
-        if (!enableUnderwaterSway || target == null)
-        {
-            return;
-        }
+        ConfigureUnderwaterSway(target);
+    }
 
-        if (target.GetComponent<PlantUnderwaterSway>() == null)
-        {
-            target.AddComponent<PlantUnderwaterSway>();
-        }
+    private static void ValidateSwayDefaults(ref PlantUnderwaterSway.SwayDefaults defaults)
+    {
+        defaults.poseHandoffSeconds = Mathf.Max(0f, defaults.poseHandoffSeconds);
+        defaults.primarySwayAngleDegrees = Mathf.Max(0f, defaults.primarySwayAngleDegrees);
+        defaults.secondarySwayAngleFactor = Mathf.Clamp01(defaults.secondarySwayAngleFactor);
+        defaults.swaySpeed = Mathf.Max(0f, defaults.swaySpeed);
+        defaults.secondarySwaySpeedFactor = Mathf.Max(0f, defaults.secondarySwaySpeedFactor);
+        defaults.animatorLayer = Mathf.Max(0, defaults.animatorLayer);
     }
 
     private void PlayPlantGrowSound(GameObject target, int activationIndex)

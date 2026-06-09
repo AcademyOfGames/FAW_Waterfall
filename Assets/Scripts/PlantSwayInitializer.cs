@@ -39,9 +39,21 @@ public class PlantSwayInitializer : MonoBehaviour
 
         foreach (GameObject plantRoot in plantRoots)
         {
-            if (plantRoot != null && plantRoot.GetComponent<PlantUnderwaterSway>() == null)
+            if (plantRoot == null)
             {
-                plantRoot.AddComponent<PlantUnderwaterSway>();
+                continue;
+            }
+
+            if (plantActivator != null)
+            {
+                plantActivator.ConfigureUnderwaterSway(plantRoot);
+            }
+            else
+            {
+                PlantUnderwaterSway.EnsureConfigured(
+                    plantRoot,
+                    PlantUnderwaterSway.SwayDefaults.CreateBuiltIn(),
+                    enabled: true);
             }
         }
     }
