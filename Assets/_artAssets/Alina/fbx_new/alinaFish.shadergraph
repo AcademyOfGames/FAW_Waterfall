@@ -375,9 +375,9 @@
         "m_Expanded": true,
         "m_Position": {
             "serializedVersion": "2",
-            "x": -369.0,
-            "y": 718.0,
-            "width": 208.00003051757813,
+            "x": -587.9999389648438,
+            "y": 766.0,
+            "width": 207.99996948242188,
             "height": 302.0
         }
     },
@@ -450,7 +450,7 @@
     "m_Hidden": false,
     "m_ShaderOutputName": "Metallic",
     "m_StageCapability": 2,
-    "m_Value": 0.05000000074505806,
+    "m_Value": 0.0,
     "m_DefaultValue": 0.0,
     "m_Labels": []
 }
@@ -606,10 +606,10 @@
         "m_Expanded": true,
         "m_Position": {
             "serializedVersion": "2",
-            "x": -601.9999389648438,
-            "y": 698.0,
-            "width": 207.99993896484376,
-            "height": 302.0
+            "x": -673.0,
+            "y": 553.0,
+            "width": 126.00006103515625,
+            "height": 118.0
         }
     },
     "m_Slots": [
@@ -649,10 +649,10 @@
         "m_Expanded": true,
         "m_Position": {
             "serializedVersion": "2",
-            "x": -629.0,
-            "y": 170.99998474121095,
+            "x": -588.0000610351563,
+            "y": 69.00000762939453,
             "width": 208.00003051757813,
-            "height": 326.0
+            "height": 326.00006103515627
         }
     },
     "m_Slots": [
@@ -994,7 +994,7 @@
     "m_WorkflowMode": 1,
     "m_NormalDropOffSpace": 0,
     "m_ClearCoat": false,
-    "m_BlendModePreserveSpecular": true
+    "m_BlendModePreserveSpecular": false
 }
 
 {
@@ -1164,10 +1164,10 @@
         "m_Expanded": true,
         "m_Position": {
             "serializedVersion": "2",
-            "x": -842.0,
-            "y": 718.0,
-            "width": 138.0,
-            "height": 34.0
+            "x": -1033.0,
+            "y": 701.0,
+            "width": 138.00006103515626,
+            "height": 34.00006103515625
         }
     },
     "m_Slots": [
@@ -1296,10 +1296,10 @@
         "m_Expanded": true,
         "m_Position": {
             "serializedVersion": "2",
-            "x": -796.9385375976563,
-            "y": 801.5010986328125,
-            "width": 0.0,
-            "height": 0.0
+            "x": -1021.9999389648438,
+            "y": 747.0,
+            "width": 147.99993896484376,
+            "height": 34.00006103515625
         }
     },
     "m_Slots": [
@@ -1648,10 +1648,10 @@
         "m_Expanded": true,
         "m_Position": {
             "serializedVersion": "2",
-            "x": -1003.0000610351563,
-            "y": 481.9999694824219,
-            "width": 206.0,
-            "height": 130.00003051757813
+            "x": -1101.0,
+            "y": 482.0000305175781,
+            "width": 206.00006103515626,
+            "height": 129.99996948242188
         }
     },
     "m_Slots": [
@@ -1786,10 +1786,10 @@
         "m_Expanded": true,
         "m_Position": {
             "serializedVersion": "2",
-            "x": -764.0000610351563,
-            "y": 481.9999694824219,
-            "width": 120.0,
-            "height": 149.00003051757813
+            "x": -874.0,
+            "y": 482.0000305175781,
+            "width": 120.00006103515625,
+            "height": 148.99996948242188
         }
     },
     "m_Slots": [
@@ -1861,7 +1861,7 @@
     "m_Hidden": false,
     "m_ShaderOutputName": "Smoothness",
     "m_StageCapability": 2,
-    "m_Value": 0.8700000047683716,
+    "m_Value": 0.5,
     "m_DefaultValue": 0.5,
     "m_Labels": []
 }
@@ -1943,9 +1943,9 @@
         "m_Expanded": true,
         "m_Position": {
             "serializedVersion": "2",
-            "x": -1680.9998779296875,
-            "y": 540.0,
-            "width": 208.0,
+            "x": -1705.0,
+            "y": 549.0,
+            "width": 207.9998779296875,
             "height": 127.0
         }
     },

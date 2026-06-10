@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.Events;
 
 /// <summary>
 /// Scales objects per band from <see cref="FrequencyAnalyzer"/>.
@@ -99,6 +100,10 @@ public class FrequencyBandVisualizer : MonoBehaviour
     [Tooltip("Logs blend-shape clock, weights, skin collection, and analyzer issues (throttled in Update).")]
     [SerializeField] private bool blendShapeDebugLogging;
 
+    [Header("Events")]
+    [Tooltip("Fires once when the blend-shape timeline reaches the end (weight 0).")]
+    [SerializeField] private UnityEvent onBlendShapeTimelineComplete;
+
     private const int BandCount = 6;
     private static readonly int GlowBaseColorId = Shader.PropertyToID("_BaseColor");
     private List<GameObject>[] _bands;
@@ -122,11 +127,19 @@ public class FrequencyBandVisualizer : MonoBehaviour
     private Color _glowMaterialBaseColor;
     private Material _glowMaterialInstance;
     private float[] _glowLightBaseIntensities;
+    private bool _blendTimelineCompleteFired;
+
+    public float BlendTimelineEndSeconds => blendShapeTimelineStartSeconds + blendShapeTimelineDurationSeconds;
+    public bool IsBlendTimelineComplete =>
+        blendShapeTimelineEnabled && GetTimedScaleClockSeconds() >= BlendTimelineEndSeconds;
+
+    public event System.Action BlendShapeTimelineCompleted;
 
     private void OnEnable()
     {
         _startupRampTimeBase = Time.time;
         _timedScaleClockBase = Time.time;
+        _blendTimelineCompleteFired = false;
     }
 
     private float GetStartupBandMultiplier()
@@ -302,6 +315,7 @@ public class FrequencyBandVisualizer : MonoBehaviour
 
         float songAmplitude = frequencyAnalyzer != null ? GetSongAmplitude() : 0f;
         ApplyGlowAndLights(clock, songAmplitude);
+        TryFireBlendTimelineComplete(clock);
 
         if (frequencyAnalyzer == null)
         {
@@ -444,6 +458,23 @@ public class FrequencyBandVisualizer : MonoBehaviour
                 continue;
             light.intensity = _glowLightBaseIntensities[i] * lightDrive;
         }
+    }
+
+    private void TryFireBlendTimelineComplete(float clockSeconds)
+    {
+        if (!blendShapeTimelineEnabled || _blendTimelineCompleteFired)
+        {
+            return;
+        }
+
+        if (clockSeconds < BlendTimelineEndSeconds)
+        {
+            return;
+        }
+
+        _blendTimelineCompleteFired = true;
+        onBlendShapeTimelineComplete?.Invoke();
+        BlendShapeTimelineCompleted?.Invoke();
     }
 
     /// <summary>

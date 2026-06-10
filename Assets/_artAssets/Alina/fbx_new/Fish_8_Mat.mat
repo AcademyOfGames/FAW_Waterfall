@@ -93,6 +93,10 @@ Material:
         m_Texture: {fileID: 0}
         m_Scale: {x: 1, y: 1}
         m_Offset: {x: 0, y: 0}
+    - _environmentCubemap:
+        m_Texture: {fileID: 8900000, guid: d7c513bb416fd7341915e6fcc688fcc8, type: 3}
+        m_Scale: {x: 1, y: 1}
+        m_Offset: {x: 0, y: 0}
     m_Ints: []
     m_Floats:
     - _AlphaClip: 0
@@ -128,7 +132,14 @@ Material:
     - _UVSec: 0
     - _WorkflowMode: 1
     - _ZWrite: 1
-    - _brightness: 1.2
+    - _brightness: 1.8
+
+    - _heightMin: -0.00383
+    - _heightMax: 0.003224
+    - _fresnelStrength: 0.5
+    - _reflectionStrength: 0.2
+    - _smoothness: 0.65
+    - _metallic: 0.15
     m_Colors:
     - _BaseColor: {r: 1, g: 0.5330188, b: 0.939768, a: 1}
     - _Color: {r: 1, g: 0.53301877, b: 0.939768, a: 1}

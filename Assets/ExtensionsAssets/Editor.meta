@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<<< HEAD:Assets/ExtensionsAssets/Editor.meta
 guid: 38c51cb39c7854bc8a8f2f6c5dc65a72
+========
+guid: d894996bd21cb04428e87cd15fe55ce7
+>>>>>>>> origin/NonAddressableVersion:Assets/_artAssets/Alina/sound.meta
 folderAsset: yes
 DefaultImporter:
   externalObjects: {}

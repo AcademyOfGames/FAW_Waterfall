@@ -1,5 +1,9 @@
 fileFormatVersion: 2
+<<<<<<<< HEAD:Assets/AddressableAssetsData/iOS.meta
 guid: 27038b633c8e24a5cb178a787d26853f
+========
+guid: 4aa0755f174386b498a64f94568b5955
+>>>>>>>> origin/NonAddressableVersion:Assets/_artAssets/Alina/hdri.meta
 folderAsset: yes
 DefaultImporter:
   externalObjects: {}
