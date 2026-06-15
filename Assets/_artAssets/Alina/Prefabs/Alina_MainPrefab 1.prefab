@@ -118,7 +118,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: b8e4f1a29c3d4e5f8a7b6c5d4e3f2a1b, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  riverClip: {fileID: 8300000, guid: 385915cdd11967449b2afc69351cf9a2, type: 3}
+  riverClip: {fileID: 8300000, guid: 24155ef7996ba1240ae4ffa70ca9455b, type: 3}
   leadSecondsBeforeFish: 10
   fadeInDurationSeconds: 10
   startVolume: 0

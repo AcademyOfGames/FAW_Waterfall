@@ -34,7 +34,7 @@ Material:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: Gourd_BAKED.001
-  m_Shader: {fileID: -6465566751694194690, guid: 47e84ce9e0fb4f944a982376de0e833c,
+  m_Shader: {fileID: -6465566751694194690, guid: c81940e1ee0d649499cbfdbc8bbe2c1d,
     type: 3}
   m_Parent: {fileID: 0}
   m_ModifiedSerializedProperties: 0
@@ -200,8 +200,10 @@ Material:
     - _ZTest: 4
     - _ZWrite: 1
     - _ZWriteControl: 0
-    - _alphaHeight: 0.16
-    - _alphaIntensity: 2.64
+    - _alphaHeight: 0.01
+    - _alphaIntensity: 4.24
+    - _fresnelcolorheight: -0.77
+    - _fresnelcolorintensity: 2.48
     - alphaCutoff: 0
     - baseColorTexture_texCoord: 0
     - emissiveExposureWeight: 0

@@ -218,6 +218,12 @@ namespace BezierSolution
 
 		private void Awake()
 		{
+#if !UNITY_EDITOR
+			drawGizmos = false;
+#else
+			if( Application.isPlaying )
+				drawGizmos = false;
+#endif
 			Refresh();
 		}
 

@@ -38,6 +38,10 @@ public class SplineFishGroupOrchestrator : MonoBehaviour
     [Tooltip("When on, begins the A->B sequence on Play. Leave off when RandomOneAtATimeActivator (or another trigger) calls StartSequence().")]
     [SerializeField] private bool startOnPlay;
 
+    [Header("Ambience")]
+    [Tooltip("Optional looped river bed when fish begin swimming. Auto-resolved on this object or in the scene when empty.")]
+    [SerializeField] private ExperienceRiverAmbience riverAmbience;
+
     [Header("Looping")]
     [Tooltip("When on, after group B shrinks the sequence returns to group A and repeats forever.")]
     [SerializeField] private bool loopForever = true;
@@ -66,6 +70,11 @@ public class SplineFishGroupOrchestrator : MonoBehaviour
         groupAReleaseBeforeBShrinkSeconds = Mathf.Max(0f, groupAReleaseBeforeBShrinkSeconds);
     }
 
+    private void Awake()
+    {
+        EnsureRiverAmbience();
+    }
+
     private void Start()
     {
         PrepareGroupForSequence(groupB);
@@ -88,7 +97,37 @@ public class SplineFishGroupOrchestrator : MonoBehaviour
             StopCoroutine(_sequenceRoutine);
         }
 
+        EnsureRiverAmbience();
+        riverAmbience?.BeginStage2Ambience();
+        riverAmbience?.BeginExperienceEndMonitoring(this, null, 0f, 0f);
+
         _sequenceRoutine = StartCoroutine(PlaySequenceRoutine());
+    }
+
+    private void EnsureRiverAmbience()
+    {
+        if (riverAmbience != null)
+        {
+            return;
+        }
+
+        riverAmbience = GetComponent<ExperienceRiverAmbience>();
+        if (riverAmbience != null)
+        {
+            return;
+        }
+
+        riverAmbience = GetComponentInParent<ExperienceRiverAmbience>();
+        if (riverAmbience != null)
+        {
+            return;
+        }
+
+        Transform sceneRoot = transform.root;
+        if (sceneRoot != null)
+        {
+            riverAmbience = sceneRoot.GetComponentInChildren<ExperienceRiverAmbience>(true);
+        }
     }
 
     /// <summary>Legacy alias for <see cref="StartSequence"/>.</summary>

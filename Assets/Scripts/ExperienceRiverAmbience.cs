@@ -7,7 +7,7 @@ using UnityEngine;
 [DisallowMultipleComponent]
 public class ExperienceRiverAmbience : MonoBehaviour
 {
-    private const string DefaultRiverClipPath = "Assets/_artAssets/Alina/sound/TualatinRiverrecording.WAV";
+    private const string DefaultRiverClipPath = "Assets/_artAssets/Alina/sound/river.mp3";
     private const string DefaultShimmerClipPath =
         "Assets/_artAssets/Alina/sound/Ethereal_shimmering__#4-1780507487369.mp3";
 
@@ -55,6 +55,11 @@ public class ExperienceRiverAmbience : MonoBehaviour
 
     public float LeadSecondsBeforeFish => leadSecondsBeforeFish;
 
+    private void Awake()
+    {
+        EnsureRiverClipAssigned();
+    }
+
     private void OnValidate()
     {
         leadSecondsBeforeFish = Mathf.Max(0f, leadSecondsBeforeFish);
@@ -83,6 +88,20 @@ public class ExperienceRiverAmbience : MonoBehaviour
     {
         StopFadeOutRoutine();
         _fadeOutRoutine = StartCoroutine(FadeOutAndStopRoutine());
+    }
+
+    /// <summary>Starts fade-out if needed and yields until river and shimmer have fully stopped.</summary>
+    public IEnumerator FadeOutAndWait()
+    {
+        if (_fadeOutRoutine == null)
+        {
+            RequestFadeOut();
+        }
+
+        while (_fadeOutRoutine != null)
+        {
+            yield return null;
+        }
     }
 
     /// <summary>Starts river + shimmer fade-in together once (plant growth lead-in).</summary>
@@ -134,7 +153,15 @@ public class ExperienceRiverAmbience : MonoBehaviour
 
     private IEnumerator RiverFadeInRoutine()
     {
+        EnsureRiverClipAssigned();
+        if (riverClip == null)
+        {
+            _riverFadeRoutine = null;
+            yield break;
+        }
+
         EnsureRiverSource();
+        PrepareClipForPlayback(riverClip);
         _riverSource.clip = riverClip;
         _riverSource.loop = loopRiver;
         _riverSource.volume = startVolume;
@@ -158,6 +185,7 @@ public class ExperienceRiverAmbience : MonoBehaviour
     private IEnumerator ShimmerFadeInRoutine()
     {
         EnsureShimmerSource();
+        PrepareClipForPlayback(shimmerClip);
         _shimmerSource.clip = shimmerClip;
         _shimmerSource.loop = loopShimmer;
         _shimmerSource.volume = shimmerStartVolume;
@@ -277,6 +305,7 @@ public class ExperienceRiverAmbience : MonoBehaviour
         if (!fadeRiver && !fadeShimmer)
         {
             StopSourcesImmediate();
+            _fadeOutRoutine = null;
             yield break;
         }
 
@@ -418,13 +447,33 @@ public class ExperienceRiverAmbience : MonoBehaviour
         }
     }
 
-#if UNITY_EDITOR
-    private void TryAssignDefaultClipsInEditor()
+    private void EnsureRiverClipAssigned()
     {
+#if UNITY_EDITOR
         if (riverClip == null)
         {
             riverClip = UnityEditor.AssetDatabase.LoadAssetAtPath<AudioClip>(DefaultRiverClipPath);
         }
+#endif
+    }
+
+    private static void PrepareClipForPlayback(AudioClip clip)
+    {
+        if (clip == null)
+        {
+            return;
+        }
+
+        if (clip.loadState == AudioDataLoadState.Unloaded)
+        {
+            clip.LoadAudioData();
+        }
+    }
+
+#if UNITY_EDITOR
+    private void TryAssignDefaultClipsInEditor()
+    {
+        EnsureRiverClipAssigned();
 
         if (shimmerClip == null)
         {

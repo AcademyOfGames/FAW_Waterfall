@@ -1319,8 +1319,6 @@ MonoBehaviour:
   forceBenaroyaGeofence: 0
   forceAlinaGeofence: 0
   forceSampleSceneGeofence: 0
-  forceChenoaGeofence: 0
-  forceDanGeofence: 0
   buildRuntimeForceGeofenceToggles: 0
   simulateLocationInEditor: 0
   simulatedLatitude: 47.9

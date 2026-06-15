@@ -11,10 +11,10 @@ EditorBuildSettings:
   - enabled: 1
     path: Assets/Scenes/DivineScene.unity
     guid: 05571857fe92a30469e705532a0a3ec3
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/ChenoaScene.unity
     guid: 757ffdeed9915be479120827bb9783d6
-  - enabled: 1
+  - enabled: 0
     path: Assets/Scenes/DanScene.unity
     guid: a406e282be8741c44b200078ae80984b
   - enabled: 1
@@ -22,13 +22,13 @@ EditorBuildSettings:
     guid: 9f387381f11ef90499c08009d7412cb5
   - enabled: 1
     path: Assets/Scenes/AlinaScene.unity
-    guid: 216691aab5e9fe94bac39eec0f070009
+    guid: 01c6a192cd294e847acaae3ef9331746
   - enabled: 1
     path: Assets/Scenes/devScene.unity
     guid: 70531daf232db3d4481bc777566fce82
   - enabled: 0
-    path: Assets/Scenes/AlinaGroundTracking.unity
-    guid: 01c6a192cd294e847acaae3ef9331746
+    path: Assets/Scenes/AlinaSceneGeo.unity
+    guid: 216691aab5e9fe94bac39eec0f070009
   m_configObjects:
     UnityEditor.XR.ARCore.ARCoreSettings: {fileID: 11400000, guid: d03d372fc92c8444584da0a60b01e7b3,
       type: 2}

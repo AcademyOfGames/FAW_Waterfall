@@ -206,12 +206,14 @@ public class ViewerSpiralSplineRig : MonoBehaviour
 
     private void EnableSplineGizmos()
     {
-        if (spline == null)
+#if UNITY_EDITOR
+        if (Application.isPlaying || spline == null)
         {
             return;
         }
 
         spline.drawGizmos = true;
+#endif
     }
 
     private void ClearSplinePoints()

@@ -35,14 +35,12 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     [SerializeField] private Color nearestExperienceNameColor = new Color32(0x2E, 0x8B, 0xFF, 0xFF);
 
     [Header("Debug / testing — force geofence")]
-    [Tooltip("Pretend GPS is at this experience's lat/lon. If more than one is checked, the first in list order below wins (Benaroya → Alina → Divine → Chenoa → Dan).")]
+    [Tooltip("Pretend GPS is at this experience's lat/lon. If more than one is checked, the first in list order below wins (Benaroya → Alina → Divine).")]
     [SerializeField] private bool forceBenaroyaGeofence;
     [FormerlySerializedAs("forceAtAlinaGeofence")]
     [SerializeField] private bool forceAlinaGeofence;
     [FormerlySerializedAs("forceSampleSceneGeofence")]
     [SerializeField] private bool forceDivineSceneGeofence;
-    [SerializeField] private bool forceChenoaGeofence;
-    [SerializeField] private bool forceDanGeofence;
     [Tooltip("When runtime HUD is built, add on-screen toggles for force-geofence overrides.")]
     [SerializeField] private bool buildRuntimeForceGeofenceToggles = true;
 
@@ -555,8 +553,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     }
 
     private bool AnyForceGeofenceEnabled =>
-        forceBenaroyaGeofence || forceAlinaGeofence || forceDivineSceneGeofence ||
-        forceChenoaGeofence || forceDanGeofence;
+        forceBenaroyaGeofence || forceAlinaGeofence || forceDivineSceneGeofence;
 
     private bool TryGetForcedGeofence(out ExperienceGeofenceDefinition definition)
     {
@@ -588,8 +585,6 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
                 "benaroyaScene" => forceBenaroyaGeofence,
                 "AlinaScene" => forceAlinaGeofence,
                 "DivineScene" => forceDivineSceneGeofence,
-                "ChenoaScene" => forceChenoaGeofence,
-                "DanScene" => forceDanGeofence,
                 _ => false
             };
         }
@@ -620,14 +615,6 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
                 case "DivineScene":
                     if (forceDivineSceneGeofence == value) return false;
                     forceDivineSceneGeofence = value;
-                    return true;
-                case "ChenoaScene":
-                    if (forceChenoaGeofence == value) return false;
-                    forceChenoaGeofence = value;
-                    return true;
-                case "DanScene":
-                    if (forceDanGeofence == value) return false;
-                    forceDanGeofence = value;
                     return true;
             }
         }

@@ -31,20 +31,6 @@ public struct ExperienceGeofenceDefinition
             SceneName = "DivineScene",
             Latitude = 47.6111,
             Longitude = -122.339
-        },
-        new ExperienceGeofenceDefinition
-        {
-            ExperienceName = "Chenoa",
-            SceneName = "ChenoaScene",
-            Latitude = 47.599,
-            Longitude = -122.3301
-        },
-        new ExperienceGeofenceDefinition
-        {
-            ExperienceName = "Dan",
-            SceneName = "DanScene",
-            Latitude = 47.6028,
-            Longitude = -122.3312
         }
     };
 
@@ -80,8 +66,6 @@ public struct ExperienceGeofenceDefinition
             case "alina": sceneName = "AlinaScene"; return true;
             case "divine": sceneName = "DivineScene"; return true;
             case "samplescene": sceneName = "DivineScene"; return true;
-            case "chenoa": sceneName = "ChenoaScene"; return true;
-            case "dan": sceneName = "DanScene"; return true;
             case "dev": sceneName = "devScene"; return true;
             default:
                 sceneName = null;
