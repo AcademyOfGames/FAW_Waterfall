@@ -13,21 +13,21 @@ public struct ExperienceGeofenceDefinition
     {
         new ExperienceGeofenceDefinition
         {
-            ExperienceName = "Benaroya",
+            ExperienceName = "Flower Dance",
             SceneName = "benaroyaScene",
             Latitude = 47.608,
             Longitude = -122.3362
         },
         new ExperienceGeofenceDefinition
         {
-            ExperienceName = "Alina",
+            ExperienceName = "Latent Seas",
             SceneName = "AlinaScene",
             Latitude = 47.61974,
             Longitude = -122.3516
         },
         new ExperienceGeofenceDefinition
         {
-            ExperienceName = "Divine",
+            ExperienceName = "Parasitic Healing Bath",
             SceneName = "DivineScene",
             Latitude = 47.6111,
             Longitude = -122.339
