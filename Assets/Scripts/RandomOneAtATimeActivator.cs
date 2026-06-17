@@ -58,6 +58,7 @@ public class RandomOneAtATimeActivator : MonoBehaviour
 
     public IReadOnlyList<GameObject> PlantTargets => targets;
     public PlantUnderwaterSway.SwayDefaults UnderwaterSwayDefaults => underwaterSwayDefaults;
+    public bool DrivesFishOrchestrator => fishOrchestrator != null;
 
     public void ConfigureUnderwaterSway(GameObject target)
     {
@@ -96,12 +97,62 @@ public class RandomOneAtATimeActivator : MonoBehaviour
 
     private void Start()
     {
+        BeginActivationSequence();
+    }
+
+    /// <summary>Stops the current run, resets plant targets, and replays the grow + fish release schedule.</summary>
+    public void ResetAndRestart()
+    {
+        if (_activationRoutine != null)
+        {
+            StopCoroutine(_activationRoutine);
+            _activationRoutine = null;
+        }
+
+        _riverLeadInTriggered = false;
+
+        for (int i = 0; i < targets.Count; i++)
+        {
+            ResetPlantTarget(targets[i]);
+        }
+
+        BeginActivationSequence();
+    }
+
+    private void BeginActivationSequence()
+    {
         if (_activationRoutine != null)
         {
             StopCoroutine(_activationRoutine);
         }
 
         _activationRoutine = StartCoroutine(ActivateRandomlyOverTime());
+    }
+
+    private static void ResetPlantTarget(GameObject target)
+    {
+        if (target == null)
+        {
+            return;
+        }
+
+        PlantUnderwaterSway sway = target.GetComponent<PlantUnderwaterSway>();
+        if (sway != null)
+        {
+            Destroy(sway);
+        }
+
+        Animator[] animators = target.GetComponentsInChildren<Animator>(true);
+        for (int i = 0; i < animators.Length; i++)
+        {
+            Animator animator = animators[i];
+            if (animator != null)
+            {
+                animator.enabled = true;
+            }
+        }
+
+        target.SetActive(false);
     }
 
     private IEnumerator ActivateRandomlyOverTime()

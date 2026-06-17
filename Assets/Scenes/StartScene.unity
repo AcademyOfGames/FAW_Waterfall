@@ -1050,7 +1050,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Distance info
+  m_text: ' '
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: cd882822b2e783a4283200706fa7f105, type: 2}
   m_sharedMaterial: {fileID: 3593240893418791340, guid: cd882822b2e783a4283200706fa7f105,
@@ -1318,7 +1318,7 @@ MonoBehaviour:
   nearestExperienceNameColor: {r: 0.2784314, g: 0.050980397, b: 0.8196079, a: 1}
   forceBenaroyaGeofence: 0
   forceAlinaGeofence: 0
-  forceSampleSceneGeofence: 0
+  forceDivineSceneGeofence: 0
   buildRuntimeForceGeofenceToggles: 0
   simulateLocationInEditor: 0
   simulatedLatitude: 47.9
@@ -2374,6 +2374,11 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Name
       value: DebugCanvas
+      objectReference: {fileID: 0}
+    - target: {fileID: 6057514000936288846, guid: 28b4961932840c442bdb3a84117c9728,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []

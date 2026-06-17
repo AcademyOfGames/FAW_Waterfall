@@ -50,12 +50,58 @@ public class PlantFishReleaseController : MonoBehaviour
     [SerializeField] private float homingTurnSpeed = 6f;
 
     private readonly List<int> _releaseIndices = new List<int>();
+    private readonly List<FollowerAnchorSnapshot> _anchorSnapshots = new List<FollowerAnchorSnapshot>();
     private bool _releaseStarted;
     private bool _shutdown;
     private Coroutine _waitRoutine;
     private Coroutine _releaseAllRoutine;
 
     public bool IsShutdown => _shutdown;
+
+    private struct FollowerAnchorSnapshot
+    {
+        public int Index;
+        public Transform Parent;
+        public Vector3 LocalPosition;
+        public Quaternion LocalRotation;
+        public Vector3 LocalScale;
+    }
+
+    /// <summary>Restores plant fish to their pre-release anchors and schedules another release pass.</summary>
+    public void ResetForReplay()
+    {
+        _shutdown = false;
+        _releaseStarted = false;
+
+        if (_waitRoutine != null)
+        {
+            StopCoroutine(_waitRoutine);
+            _waitRoutine = null;
+        }
+
+        if (_releaseAllRoutine != null)
+        {
+            StopCoroutine(_releaseAllRoutine);
+            _releaseAllRoutine = null;
+        }
+
+        if (targetSwarm != null)
+        {
+            RestoreFollowerAnchors();
+            targetSwarm.StopSwarmImmediate();
+
+            if (hideUntilRelease && HasAssignedFollowers())
+            {
+                targetSwarm.PreparePlantFishRelease(plantFishScaleFactor, hideFollowers: true);
+            }
+        }
+        else
+        {
+            _anchorSnapshots.Clear();
+        }
+
+        ScheduleRelease();
+    }
 
     private void OnValidate()
     {
@@ -180,6 +226,7 @@ public class PlantFishReleaseController : MonoBehaviour
         targetSwarm.PreparePlantFishRelease(plantFishScaleFactor, hideUntilRelease);
 
         BuildReleaseIndexList();
+        CaptureFollowerAnchors();
         targetSwarm.BeginSwarmForPlantRelease();
         _releaseAllRoutine = StartCoroutine(ReleaseAllFishRoutine());
     }
@@ -195,6 +242,72 @@ public class PlantFishReleaseController : MonoBehaviour
                 _releaseIndices.Add(i);
             }
         }
+    }
+
+    private void CaptureFollowerAnchors()
+    {
+        _anchorSnapshots.Clear();
+
+        if (targetSwarm == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < _releaseIndices.Count; i++)
+        {
+            int followerIndex = _releaseIndices[i];
+            if (followerIndex < 0 || followerIndex >= targetSwarm.FollowerCount)
+            {
+                continue;
+            }
+
+            Transform follower = targetSwarm.Followers[followerIndex];
+            if (follower == null)
+            {
+                continue;
+            }
+
+            _anchorSnapshots.Add(new FollowerAnchorSnapshot
+            {
+                Index = followerIndex,
+                Parent = follower.parent,
+                LocalPosition = follower.localPosition,
+                LocalRotation = follower.localRotation,
+                LocalScale = follower.localScale
+            });
+        }
+    }
+
+    private void RestoreFollowerAnchors()
+    {
+        if (targetSwarm == null)
+        {
+            _anchorSnapshots.Clear();
+            return;
+        }
+
+        for (int i = 0; i < _anchorSnapshots.Count; i++)
+        {
+            FollowerAnchorSnapshot snapshot = _anchorSnapshots[i];
+            if (snapshot.Index < 0 || snapshot.Index >= targetSwarm.FollowerCount)
+            {
+                continue;
+            }
+
+            Transform follower = targetSwarm.Followers[snapshot.Index];
+            if (follower == null || snapshot.Parent == null)
+            {
+                continue;
+            }
+
+            follower.SetParent(snapshot.Parent, false);
+            follower.localPosition = snapshot.LocalPosition;
+            follower.localRotation = snapshot.LocalRotation;
+            follower.localScale = snapshot.LocalScale;
+            follower.gameObject.SetActive(false);
+        }
+
+        _anchorSnapshots.Clear();
     }
 
     private bool HasAssignedFollowers()

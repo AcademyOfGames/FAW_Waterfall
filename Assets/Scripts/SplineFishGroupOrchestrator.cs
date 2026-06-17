@@ -147,6 +147,23 @@ public class SplineFishGroupOrchestrator : MonoBehaviour
         StopAllGroupsImmediate();
     }
 
+    /// <summary>Returns fish groups to their pre-sequence state. Optionally restarts when <see cref="startOnPlay"/> is on.</summary>
+    public void ResetForReplay(bool restartIfStartOnPlay = false)
+    {
+        StopSequence();
+        PrepareGroupForSequence(groupB);
+
+        if (!startOnPlay)
+        {
+            PrepareGroupForSequence(groupA);
+        }
+
+        if (restartIfStartOnPlay && startOnPlay)
+        {
+            StartSequence();
+        }
+    }
+
     /// <summary>Legacy alias for <see cref="StopSequence"/>.</summary>
     public void StopLoop()
     {

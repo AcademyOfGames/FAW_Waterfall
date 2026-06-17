@@ -2,7 +2,6 @@ using System.Collections;
 using System.Collections.Generic;
 using BezierSolution;
 using UnityEngine;
-using UnityEngine.SceneManagement;
 
 /// <summary>
 /// Stage 4: fish peel from Stage 3 onto a bridge spline, swim to Stage 4, then home onto the
@@ -56,11 +55,11 @@ public class ViewerFishEncounterController : MonoBehaviour
     [SerializeField] private float stage4JoinTimeoutSeconds = 15f;
     [SerializeField] private float stage4HomingTurnSpeed = 8f;
 
-    private const string AutoReloadSceneNameContains = "AlinaGroundTracking";
-    private const float SceneReloadDelaySeconds = 2f;
+    private const float ExperienceResetDelaySeconds = 2f;
 
     private Coroutine _encounterRoutine;
     private bool _encounterStarted;
+    private AlinaExperienceReset _experienceReset;
     private Transform _bridgeRoot;
     private readonly List<VertexPathSwarmFollower> _bridgeSwarms = new List<VertexPathSwarmFollower>();
     private readonly List<BezierSpline> _runtimeBridges = new List<BezierSpline>();
@@ -567,31 +566,45 @@ public class ViewerFishEncounterController : MonoBehaviour
             yield return riverAmbience.FadeOutAndWait();
         }
 
-        if (!ShouldReloadSceneAfterEncounter())
+        if (ExperienceResetDelaySeconds > 0f)
         {
-            yield break;
+            yield return new WaitForSeconds(ExperienceResetDelaySeconds);
         }
 
-        if (SceneReloadDelaySeconds > 0f)
-        {
-            yield return new WaitForSeconds(SceneReloadDelaySeconds);
-        }
-
-        Scene activeScene = SceneManager.GetActiveScene();
-        if (!activeScene.IsValid())
-        {
-            yield break;
-        }
-
-        SceneManager.LoadScene(activeScene.buildIndex);
+        ResolveExperienceReset()?.ResetExperience();
     }
 
-    private bool ShouldReloadSceneAfterEncounter()
+    /// <summary>Clears encounter state so Stage 4 can run again after a soft reset.</summary>
+    public void ResetForReplay()
     {
-        string activeSceneName = SceneManager.GetActiveScene().name;
-        return activeSceneName.IndexOf(
-            AutoReloadSceneNameContains,
-            System.StringComparison.OrdinalIgnoreCase) >= 0;
+        if (_encounterRoutine != null)
+        {
+            StopCoroutine(_encounterRoutine);
+            _encounterRoutine = null;
+        }
+
+        _encounterStarted = false;
+        CleanupBridgeInfrastructure(ResolveStage4Convoy(ResolveStage4Rig()));
+    }
+
+    private AlinaExperienceReset ResolveExperienceReset()
+    {
+        if (_experienceReset != null)
+        {
+            return _experienceReset;
+        }
+
+        Transform root = transform.root;
+        if (root != null)
+        {
+            _experienceReset = root.GetComponentInChildren<AlinaExperienceReset>(true);
+            if (_experienceReset == null)
+            {
+                _experienceReset = root.gameObject.AddComponent<AlinaExperienceReset>();
+            }
+        }
+
+        return _experienceReset;
     }
 
     private void EnsureRiverAmbience()

@@ -447,6 +447,16 @@ public class ExperienceRiverAmbience : MonoBehaviour
         }
     }
 
+    /// <summary>Clears playback state so the next plant lead-in can fade river and shimmer in again.</summary>
+    public void ResetForReplay()
+    {
+        UnsubscribeOrchestrator();
+        StopAllAmbienceCoroutines();
+        StopSourcesImmediate();
+        _riverFadeInStarted = false;
+        _shimmerFadeInStarted = false;
+    }
+
     private void EnsureRiverClipAssigned()
     {
 #if UNITY_EDITOR
