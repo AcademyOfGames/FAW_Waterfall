@@ -127,8 +127,10 @@ Material:
     - _UVSec: 0
     - _WorkflowMode: 1
     - _ZWrite: 1
-    - _alphaHeight: 0.23
-    - _alphaIntensity: 3
+    - _alphaHeight: 0.001
+    - _alphaIntensity: 130
+    - _fresnelColorHeight: 0.03
+    - _fresnelColorIntensity: 35
     m_Colors:
     - _BaseColor: {r: 0.9063317, g: 0.9063317, b: 0.9063317, a: 1}
     - _Color: {r: 0.9063317, g: 0.9063317, b: 0.9063317, a: 1}

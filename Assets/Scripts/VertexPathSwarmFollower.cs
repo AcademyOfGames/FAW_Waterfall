@@ -41,6 +41,7 @@ public class VertexPathSwarmFollower : MonoBehaviour
         public float EncounterScaleStartTime = -1f;
         public float EncounterBaseScaleMultiplier = 1f;
         public bool EncounterFinished;
+        public bool BridgeWaitingHandoff;
     }
 
     private const string Flora1MaterialPath = "Assets/alinaFlora1.mat";
@@ -143,6 +144,7 @@ public class VertexPathSwarmFollower : MonoBehaviour
     private bool _encounterConvoyFrontActive;
     private bool _isEncounterConvoy;
     private bool _isBridgeTransit;
+    private bool _bridgeContinuousHandoff;
     private int _encounterFollowersAddedCount;
     private readonly List<BridgeArrival> _bridgeArrivals = new List<BridgeArrival>();
     private bool _encounterHomingActive;
@@ -170,6 +172,7 @@ public class VertexPathSwarmFollower : MonoBehaviour
     public float SwarmStartedTime => _swarmStartedTime;
     public bool IsEncounterConvoy => _isEncounterConvoy;
     public bool IsBridgeTransit => _isBridgeTransit;
+    public bool UsesContinuousBridgeHandoff => _isBridgeTransit && _bridgeContinuousHandoff;
     public float FishSpacing => fishSpacing;
     public float PathSpeed => pathSpeed;
     public float HeadGap => headGap;
@@ -755,6 +758,12 @@ public class VertexPathSwarmFollower : MonoBehaviour
         state.HasAssignedMaterial = snapshot.HasAssignedMaterial;
     }
 
+    private void ApplyStage4TubeRadiusFromConvoy(FollowerState state, FollowerTransferSnapshot snapshot)
+    {
+        float sourceRadius = Mathf.Max(snapshot.TubeRadius, 0.001f);
+        state.TubeRadius = tubeRadius * (state.TubeRadius / sourceRadius);
+    }
+
     /// <summary>
     /// Prepares Stage 4 convoy: normal per-fish conveyor motion + disappear at path end (no peel/homing/front-T).
     /// </summary>
@@ -818,6 +827,16 @@ public class VertexPathSwarmFollower : MonoBehaviour
     /// <summary>Conveyor on a bridge spline only — fish dequeue when they reach the end.</summary>
     public void BeginBridgeTransit(BezierSpline bridgeSpline, float speed, float spacing)
     {
+        BeginBridgeTransit(bridgeSpline, speed, spacing, continuousHandoff: false);
+    }
+
+    /// <summary>Bridge transit with optional continuous handoff (stay on spline through Stage 4 join).</summary>
+    public void BeginBridgeTransit(
+        BezierSpline bridgeSpline,
+        float speed,
+        float spacing,
+        bool continuousHandoff)
+    {
         CancelDelayedStart();
         StopEncounterHoming();
 
@@ -827,6 +846,7 @@ public class VertexPathSwarmFollower : MonoBehaviour
             _activateFollowersRoutine = null;
         }
 
+        _bridgeContinuousHandoff = continuousHandoff;
         _isBridgeTransit = true;
         _isEncounterConvoy = false;
         _encounterConvoyFrontActive = false;
@@ -859,7 +879,26 @@ public class VertexPathSwarmFollower : MonoBehaviour
         return _isBridgeTransit && followers.Count > 0;
     }
 
-    public bool HasPendingBridgeArrivals => _isBridgeTransit && _bridgeArrivals.Count > 0;
+    public bool HasPendingBridgeArrivals =>
+        _isBridgeTransit && (_bridgeArrivals.Count > 0 || HasBridgeHandoffWaiting());
+
+    public bool HasBridgeHandoffWaiting()
+    {
+        if (!_isBridgeTransit || !_bridgeContinuousHandoff)
+        {
+            return false;
+        }
+
+        for (int i = 0; i < _states.Count; i++)
+        {
+            if (_states[i] != null && _states[i].BridgeWaitingHandoff)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     public bool TryDequeueBridgeArrival(out BridgeArrival arrival)
     {
@@ -881,14 +920,18 @@ public class VertexPathSwarmFollower : MonoBehaviour
             return false;
         }
 
+        Vector3 peelWorldPosition = follower.position;
+
         follower.SetParent(transform, true);
         EnsureFollowerVisible(follower);
 
-        followers.Add(follower);
-
         FollowerState state = CreateEncounterFollowerState(_nextSlotIndex++);
         ApplyTransferSnapshot(state, snapshot);
-        state.NormalizedT = ResolveBridgeEntryNormalizedT();
+        state.NormalizedT = _bridgeContinuousHandoff
+            ? ResolveBridgeEntryNormalizedT()
+            : ResolveBridgeEntryNormalizedTFromWorld(peelWorldPosition);
+
+        followers.Add(follower);
         _states.Add(state);
         CaptureFollowerBaseScale(follower, state, forceRecapture: false);
         CaptureFollowerPrefabRotation(follower, state, forceRecapture: false);
@@ -948,15 +991,15 @@ public class VertexPathSwarmFollower : MonoBehaviour
 
     private float ResolveBridgeEntryNormalizedT()
     {
-        if (spline == null || followers.Count <= 1)
+        if (spline == null || _states.Count == 0)
         {
             return 0f;
         }
 
         float minT = float.MaxValue;
-        for (int i = 0; i < followers.Count - 1; i++)
+        for (int i = 0; i < _states.Count; i++)
         {
-            if (i >= _states.Count || _states[i] == null)
+            if (_states[i] == null)
             {
                 continue;
             }
@@ -975,6 +1018,66 @@ public class VertexPathSwarmFollower : MonoBehaviour
         return Mathf.Clamp01(trailT);
     }
 
+    private float ResolveBridgeEntryNormalizedTFromWorld(Vector3 worldPosition)
+    {
+        if (spline == null)
+        {
+            return 0f;
+        }
+
+        float entryT = FindClosestNormalizedTOnSpline(worldPosition);
+        float rearmostT = GetRearmostBridgeNormalizedT();
+        if (rearmostT < 0f)
+        {
+            return entryT;
+        }
+
+        if (_movingForward)
+        {
+            return Mathf.Clamp(Mathf.Min(entryT, rearmostT), 0f, 1f);
+        }
+
+        return Mathf.Clamp(Mathf.Max(entryT, rearmostT), 0f, 1f);
+    }
+
+    private float GetRearmostBridgeNormalizedT()
+    {
+        float rearmostT = -1f;
+        for (int i = 0; i < _states.Count; i++)
+        {
+            if (_states[i] == null)
+            {
+                continue;
+            }
+
+            if (rearmostT < 0f)
+            {
+                rearmostT = _states[i].NormalizedT;
+                continue;
+            }
+
+            rearmostT = _movingForward
+                ? Mathf.Min(rearmostT, _states[i].NormalizedT)
+                : Mathf.Max(rearmostT, _states[i].NormalizedT);
+        }
+
+        return rearmostT;
+    }
+
+    private float FindClosestNormalizedTOnSpline(Vector3 worldPosition)
+    {
+        if (spline == null)
+        {
+            return 0f;
+        }
+
+        spline.FindNearestPointTo(
+            worldPosition,
+            out float normalizedT,
+            PathSampleAccuracy * 8);
+        return Mathf.Clamp01(normalizedT);
+    }
+
     private void ProcessBridgeTransitArrivals()
     {
         for (int i = followers.Count - 1; i >= 0; i--)
@@ -988,6 +1091,13 @@ public class VertexPathSwarmFollower : MonoBehaviour
 
             if (state.NormalizedT < EncounterPathEndThreshold)
             {
+                continue;
+            }
+
+            if (_bridgeContinuousHandoff)
+            {
+                state.BridgeWaitingHandoff = true;
+                state.NormalizedT = EncounterPathEndThreshold;
                 continue;
             }
 
@@ -1005,9 +1115,58 @@ public class VertexPathSwarmFollower : MonoBehaviour
         }
     }
 
+    /// <summary>Transfers the frontmost bridge fish waiting at the end (continuous handoff only).</summary>
+    public bool TryExtractBridgeHandoffFish(out BridgeArrival arrival)
+    {
+        arrival = default;
+        if (!_isBridgeTransit || !_bridgeContinuousHandoff)
+        {
+            return false;
+        }
+
+        int leadIndex = -1;
+        float leadT = -1f;
+        for (int i = 0; i < followers.Count; i++)
+        {
+            if (_states[i] == null || !_states[i].BridgeWaitingHandoff)
+            {
+                continue;
+            }
+
+            if (leadIndex < 0 || _states[i].NormalizedT > leadT)
+            {
+                leadIndex = i;
+                leadT = _states[i].NormalizedT;
+            }
+        }
+
+        if (leadIndex < 0)
+        {
+            return false;
+        }
+
+        Transform follower = followers[leadIndex];
+        FollowerState state = _states[leadIndex];
+        if (follower == null || state == null)
+        {
+            return false;
+        }
+
+        arrival = new BridgeArrival
+        {
+            Follower = follower,
+            Snapshot = CreateTransferSnapshot(state)
+        };
+
+        followers.RemoveAt(leadIndex);
+        _states.RemoveAt(leadIndex);
+        return true;
+    }
+
     public void StopBridgeTransit()
     {
         _isBridgeTransit = false;
+        _bridgeContinuousHandoff = false;
         _swarmRunning = false;
         _swarmFollowingActive = false;
     }
@@ -1043,6 +1202,7 @@ public class VertexPathSwarmFollower : MonoBehaviour
 
         FollowerState state = CreateEncounterFollowerState(_nextSlotIndex++);
         ApplyTransferSnapshot(state, snapshot);
+        ApplyStage4TubeRadiusFromConvoy(state, snapshot);
         state.NormalizedT = ResolveStage4JoinNormalizedT(_encounterPathStartNormalizedT, appendBehindConvoy);
         _states.Add(state);
         CaptureFollowerBaseScale(follower, state, forceRecapture: false);
@@ -1080,6 +1240,7 @@ public class VertexPathSwarmFollower : MonoBehaviour
 
         FollowerState state = CreateEncounterFollowerState(_nextSlotIndex++);
         ApplyTransferSnapshot(state, snapshot);
+        ApplyStage4TubeRadiusFromConvoy(state, snapshot);
         state.NormalizedT = ResolveStage4JoinNormalizedT(_encounterPathStartNormalizedT, appendBehindConvoy);
         _states.Add(state);
         CaptureFollowerBaseScale(follower, state, forceRecapture: false);
@@ -1094,6 +1255,77 @@ public class VertexPathSwarmFollower : MonoBehaviour
 
         SnapFollowerToSlot(index);
         ApplyFishScale(follower, state);
+    }
+
+    /// <summary>Joins Stage 4 at the fish's current world position on the spline — no convoy snap.</summary>
+    public void AcceptStage4FollowerContinuousJoin(
+        Transform follower,
+        FollowerTransferSnapshot snapshot,
+        bool appendBehindConvoy)
+    {
+        if (!_isEncounterConvoy || follower == null || spline == null)
+        {
+            return;
+        }
+
+        Vector3 joinWorldPosition = follower.position;
+
+        follower.SetParent(transform, true);
+        EnsureFollowerVisible(follower);
+
+        FollowerState state = CreateEncounterFollowerState(_nextSlotIndex++);
+        ApplyTransferSnapshot(state, snapshot);
+        ApplyStage4TubeRadiusFromConvoy(state, snapshot);
+        state.NormalizedT = ResolveStage4JoinNormalizedTFromWorld(joinWorldPosition, appendBehindConvoy);
+
+        followers.Add(follower);
+        _states.Add(state);
+        CaptureFollowerBaseScale(follower, state, forceRecapture: false);
+        CaptureFollowerPrefabRotation(follower, state, forceRecapture: false);
+        _encounterFollowersAddedCount++;
+        BeginEncounterScaleForFish(state);
+
+        if (!_swarmRunning)
+        {
+            BeginEncounterSwarmImmediate();
+        }
+
+        if (SampleFishFrame(state, out Vector3 slotCenter, out Vector3 tangent, out Vector3 right, out Vector3 up))
+        {
+            follower.position = ApplyTubeOffset(state, slotCenter, right, up);
+            follower.rotation = GetFollowerRotation(tangent, up, state);
+        }
+
+        ApplyFishScale(follower, state);
+    }
+
+    private float ResolveStage4JoinNormalizedTFromWorld(Vector3 worldPosition, bool appendBehindConvoy)
+    {
+        float joinT = FindClosestNormalizedTOnSpline(worldPosition);
+        joinT = ClampEncounterJoinNormalizedT(joinT);
+
+        if (!appendBehindConvoy || _encounterFollowersAddedCount <= 0)
+        {
+            return joinT;
+        }
+
+        float rearmostT = GetRearmostEncounterNormalizedT(includePendingHoming: true);
+        if (rearmostT < 0f)
+        {
+            return joinT;
+        }
+
+        float trailT = rearmostT;
+        float delta = _movingForward ? -fishSpacing : fishSpacing;
+        spline.MoveAlongSpline(ref trailT, delta, PathSampleAccuracy);
+        trailT = ClampEncounterJoinNormalizedT(trailT);
+
+        if (_movingForward)
+        {
+            return Mathf.Min(joinT, trailT);
+        }
+
+        return Mathf.Max(joinT, trailT);
     }
 
     private float ResolveStage4JoinNormalizedT(float junctionNormalizedT, bool appendBehindConvoy)
@@ -2560,6 +2792,11 @@ public class VertexPathSwarmFollower : MonoBehaviour
             }
 
             FollowerState state = _states[i];
+            if (_isBridgeTransit && state.BridgeWaitingHandoff)
+            {
+                continue;
+            }
+
             spline.MoveAlongSpline(ref state.NormalizedT, delta, PathSampleAccuracy);
             WrapFishNormalizedT(state);
         }

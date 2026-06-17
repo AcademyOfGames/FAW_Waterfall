@@ -20880,6 +20880,7 @@ MonoBehaviour:
   horizontalGoodThresholdMeters: 10
   horizontalExcellentThresholdMeters: 5
   checkVpsAvailability: 1
+  logAnchorDistance: 1
 --- !u!1 &1388839052
 GameObject:
   m_ObjectHideFlags: 0
@@ -21248,6 +21249,11 @@ PrefabInstance:
         type: 3}
       propertyPath: m_Name
       value: DebugCanvas
+      objectReference: {fileID: 0}
+    - target: {fileID: 6057514000936288846, guid: 28b4961932840c442bdb3a84117c9728,
+        type: 3}
+      propertyPath: m_IsActive
+      value: 0
       objectReference: {fileID: 0}
     m_RemovedComponents: []
     m_RemovedGameObjects: []
@@ -22302,6 +22308,11 @@ PrefabInstance:
       propertyPath: m_LocalPosition.z
       value: 0.35
       objectReference: {fileID: 0}
+    - target: {fileID: 3502835643803792808, guid: 0305f864b928fc34780426041747f909,
+        type: 3}
+      propertyPath: m_audioClip
+      value: 
+      objectReference: {fileID: 8300000, guid: 5bb6b013bc3552e409a6fb5c7b217395, type: 3}
     - target: {fileID: 4365213625177971617, guid: 0305f864b928fc34780426041747f909,
         type: 3}
       propertyPath: m_Color.b

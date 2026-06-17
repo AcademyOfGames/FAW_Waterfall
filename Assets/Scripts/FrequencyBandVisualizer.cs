@@ -135,6 +135,30 @@ public class FrequencyBandVisualizer : MonoBehaviour
 
     public event System.Action BlendShapeTimelineCompleted;
 
+    /// <summary>Restarts timed visuals and fern blend shapes for another playthrough.</summary>
+    public void ResetForReplay()
+    {
+        _startupRampTimeBase = Time.time;
+        _timedScaleClockBase = Time.time;
+        _blendTimelineCompleteFired = false;
+        _blendDebugLoggedNullAnalyzer = false;
+
+        if (_current != null)
+        {
+            System.Array.Clear(_current, 0, _current.Length);
+        }
+
+        if (_velocityBuffer != null)
+        {
+            System.Array.Clear(_velocityBuffer, 0, _velocityBuffer.Length);
+        }
+
+        ApplyInitialBlendShapeWeightsForTimeline();
+        ResetBandObjectScales();
+        ResetTimedScaleInObjects();
+        ResetGlowAndLights();
+    }
+
     private void OnEnable()
     {
         _startupRampTimeBase = Time.time;
@@ -269,6 +293,92 @@ public class FrequencyBandVisualizer : MonoBehaviour
             {
                 if (skins[s] == null || s >= _bandBlendShapeIndices[i].Count) continue;
                 skins[s].SetBlendShapeWeight(_bandBlendShapeIndices[i][s], 100f);
+            }
+        }
+    }
+
+    private void ResetBandObjectScales()
+    {
+        if (_bands == null || _initialScales == null)
+        {
+            return;
+        }
+
+        for (int i = 0; i < BandCount; i++)
+        {
+            var list = _bands[i];
+            if (list == null)
+            {
+                continue;
+            }
+
+            int idx = 0;
+            foreach (GameObject obj in list)
+            {
+                if (obj != null && idx < _initialScales[i].Count)
+                {
+                    obj.transform.localScale = _initialScales[i][idx] * idleScaleFraction;
+                }
+
+                idx++;
+            }
+        }
+    }
+
+    private void ResetTimedScaleInObjects()
+    {
+        if (timedScaleInGroups == null || _timedGroupInitialScales == null)
+        {
+            return;
+        }
+
+        for (int g = 0; g < timedScaleInGroups.Count; g++)
+        {
+            TimedScaleInGroup group = timedScaleInGroups[g];
+            if (group?.objects == null || g >= _timedGroupInitialScales.Length)
+            {
+                continue;
+            }
+
+            int idx = 0;
+            foreach (GameObject obj in group.objects)
+            {
+                if (obj == null || idx >= _timedGroupInitialScales[g].Count)
+                {
+                    continue;
+                }
+
+                if (_objectsInBandLists == null || !_objectsInBandLists.Contains(obj))
+                {
+                    obj.transform.localScale = Vector3.zero;
+                }
+
+                idx++;
+            }
+        }
+    }
+
+    private void ResetGlowAndLights()
+    {
+        if (_glowMaterialInstance != null)
+        {
+            Color color = _glowMaterialBaseColor;
+            color.a = 0f;
+            _glowMaterialInstance.SetColor(GlowBaseColorId, color);
+        }
+
+        if (glowLights == null || _glowLightBaseIntensities == null)
+        {
+            return;
+        }
+
+        int count = Mathf.Min(glowLights.Count, _glowLightBaseIntensities.Length);
+        for (int i = 0; i < count; i++)
+        {
+            Light light = glowLights[i];
+            if (light != null)
+            {
+                light.intensity = 0f;
             }
         }
     }

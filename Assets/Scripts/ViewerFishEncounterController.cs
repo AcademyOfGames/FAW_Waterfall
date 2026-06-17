@@ -43,14 +43,23 @@ public class ViewerFishEncounterController : MonoBehaviour
     [Tooltip("Meters per second along the Stage 4 spiral and bridge transit (independent of Stage 3 speed).")]
     [SerializeField] private float stage4PathSpeed = 4f;
 
+    [Header("Stage 3.2 (no Stage 4 handoff)")]
+    [Tooltip("Stage3_2 fish shrink out on their own spline (like Stage 2) instead of joining Stage 4.")]
+    [SerializeField] private float stage32ShrinkDurationSeconds = 5f;
+    [Tooltip("Seconds after encounter setup before Stage3_2 begins shrinking (does not delay Stage3_1 bridge handoff).")]
+    [SerializeField] private float stage32ShrinkDelaySeconds;
+
     [Header("Stage 4 join homing")]
     [SerializeField] private float stage4HomingSpeed = 5f;
     [SerializeField] private float stage4JoinDistance = 0.75f;
     [SerializeField] private float stage4JoinTimeoutSeconds = 15f;
     [SerializeField] private float stage4HomingTurnSpeed = 8f;
 
+    private const float ExperienceResetDelaySeconds = 2f;
+
     private Coroutine _encounterRoutine;
     private bool _encounterStarted;
+    private AlinaExperienceReset _experienceReset;
     private Transform _bridgeRoot;
     private readonly List<VertexPathSwarmFollower> _bridgeSwarms = new List<VertexPathSwarmFollower>();
     private readonly List<BezierSpline> _runtimeBridges = new List<BezierSpline>();
@@ -60,6 +69,7 @@ public class ViewerFishEncounterController : MonoBehaviour
     {
         EnsureFishOrchestrator();
         EnsureSplineConnection();
+        EnsureRiverAmbience();
     }
 
     private void OnValidate()
@@ -73,6 +83,8 @@ public class ViewerFishEncounterController : MonoBehaviour
         encounterEndDissolveSpreadMeters = Mathf.Max(0f, encounterEndDissolveSpreadMeters);
         encounterEndPopDurationSeconds = Mathf.Max(0.05f, encounterEndPopDurationSeconds);
         stage4PathSpeed = Mathf.Max(0.1f, stage4PathSpeed);
+        stage32ShrinkDurationSeconds = Mathf.Max(0.01f, stage32ShrinkDurationSeconds);
+        stage32ShrinkDelaySeconds = Mathf.Max(0f, stage32ShrinkDelaySeconds);
         stage4HomingSpeed = Mathf.Max(0.1f, stage4HomingSpeed);
         stage4JoinDistance = Mathf.Max(0.01f, stage4JoinDistance);
         stage4JoinTimeoutSeconds = Mathf.Max(0.5f, stage4JoinTimeoutSeconds);
@@ -169,6 +181,8 @@ public class ViewerFishEncounterController : MonoBehaviour
             yield break;
         }
 
+        StartCoroutine(BeginStage32ShrinkOutRoutine(groupB));
+
         int totalTransferred = 0;
         float encounterElapsed = 0f;
         bool motionSynced = false;
@@ -186,6 +200,11 @@ public class ViewerFishEncounterController : MonoBehaviour
                 }
 
                 VertexPathSwarmFollower sourceSwarm = splineConnection.ResolveSourceSwarm(groupB, sourceIndex);
+                if (IsStage32Source(sourceSwarm))
+                {
+                    continue;
+                }
+
                 if (sourceSwarm == null || !sourceSwarm.HasActiveFollowers())
                 {
                     _sourcePeelStopped[sourceIndex] = true;
@@ -253,7 +272,10 @@ public class ViewerFishEncounterController : MonoBehaviour
         for (int i = 0; i < _bridgeSwarms.Count; i++)
         {
             VertexPathSwarmFollower sourceSwarm = splineConnection.ResolveSourceSwarm(groupB, i);
-            sourceSwarm?.StopSwarmMotionOnly();
+            if (!IsStage32Source(sourceSwarm))
+            {
+                sourceSwarm?.StopSwarmMotionOnly();
+            }
         }
 
         ProcessBridgeArrivals(ref totalTransferred, stage4Convoy);
@@ -298,6 +320,8 @@ public class ViewerFishEncounterController : MonoBehaviour
         _bridgeRoot = bridgeRootGo.transform;
         _bridgeRoot.SetParent(transform, false);
 
+        bool anyStage4HandoffSource = false;
+
         for (int sourceIndex = 0; sourceIndex < sourceCount; sourceIndex++)
         {
             VertexPathSwarmFollower sourceSwarm = splineConnection.ResolveSourceSwarm(groupB, sourceIndex);
@@ -307,6 +331,15 @@ public class ViewerFishEncounterController : MonoBehaviour
                 _sourcePeelStopped.Add(true);
                 continue;
             }
+
+            if (IsStage32Source(sourceSwarm))
+            {
+                _bridgeSwarms.Add(null);
+                _sourcePeelStopped.Add(true);
+                continue;
+            }
+
+            anyStage4HandoffSource = true;
 
             BezierSpline bridgeSpline = splineConnection.ResolveBridgeSpline(
                 _bridgeRoot,
@@ -342,7 +375,27 @@ public class ViewerFishEncounterController : MonoBehaviour
             _sourcePeelStopped.Add(false);
         }
 
-        return _bridgeSwarms.Count > 0;
+        return anyStage4HandoffSource;
+    }
+
+    private IEnumerator BeginStage32ShrinkOutRoutine(IReadOnlyList<VertexPathSwarmFollower> groupB)
+    {
+        if (stage32ShrinkDelaySeconds > 0f)
+        {
+            yield return new WaitForSeconds(stage32ShrinkDelaySeconds);
+        }
+
+        int sourceCount = splineConnection.GetSourceCount(groupB);
+        for (int sourceIndex = 0; sourceIndex < sourceCount; sourceIndex++)
+        {
+            VertexPathSwarmFollower sourceSwarm = splineConnection.ResolveSourceSwarm(groupB, sourceIndex);
+            if (!IsStage32Source(sourceSwarm) || sourceSwarm == null || !sourceSwarm.IsSwarmRunning)
+            {
+                continue;
+            }
+
+            StartCoroutine(sourceSwarm.ShrinkAndStopSwarm(stage32ShrinkDurationSeconds));
+        }
     }
 
     private void ProcessBridgeArrivals(ref int totalTransferred, VertexPathSwarmFollower stage4Convoy)
@@ -352,6 +405,26 @@ public class ViewerFishEncounterController : MonoBehaviour
             VertexPathSwarmFollower bridgeSwarm = _bridgeSwarms[i];
             if (bridgeSwarm == null)
             {
+                continue;
+            }
+
+            if (bridgeSwarm.UsesContinuousBridgeHandoff)
+            {
+                while (bridgeSwarm.TryExtractBridgeHandoffFish(out VertexPathSwarmFollower.BridgeArrival arrival))
+                {
+                    if (maxEncounterFish > 0 && totalTransferred >= maxEncounterFish)
+                    {
+                        break;
+                    }
+
+                    bool appendBehindConvoy = totalTransferred > 0;
+                    stage4Convoy.AcceptStage4FollowerContinuousJoin(
+                        arrival.Follower,
+                        arrival.Snapshot,
+                        appendBehindConvoy);
+                    totalTransferred++;
+                }
+
                 continue;
             }
 
@@ -370,6 +443,12 @@ public class ViewerFishEncounterController : MonoBehaviour
                 totalTransferred++;
             }
         }
+    }
+
+    private static bool IsStage32Source(VertexPathSwarmFollower sourceSwarm)
+    {
+        return sourceSwarm != null
+            && sourceSwarm.name.IndexOf("Stage3_2", System.StringComparison.OrdinalIgnoreCase) >= 0;
     }
 
     private bool HasBridgeActivity()
@@ -480,8 +559,78 @@ public class ViewerFishEncounterController : MonoBehaviour
     {
         CleanupBridgeInfrastructure(convoy);
         convoy?.StopSwarmImmediate();
-        riverAmbience?.RequestFadeOut();
-        yield break;
+        _encounterStarted = false;
+
+        if (riverAmbience != null)
+        {
+            yield return riverAmbience.FadeOutAndWait();
+        }
+
+        if (ExperienceResetDelaySeconds > 0f)
+        {
+            yield return new WaitForSeconds(ExperienceResetDelaySeconds);
+        }
+
+        ResolveExperienceReset()?.ResetExperience();
+    }
+
+    /// <summary>Clears encounter state so Stage 4 can run again after a soft reset.</summary>
+    public void ResetForReplay()
+    {
+        if (_encounterRoutine != null)
+        {
+            StopCoroutine(_encounterRoutine);
+            _encounterRoutine = null;
+        }
+
+        _encounterStarted = false;
+        CleanupBridgeInfrastructure(ResolveStage4Convoy(ResolveStage4Rig()));
+    }
+
+    private AlinaExperienceReset ResolveExperienceReset()
+    {
+        if (_experienceReset != null)
+        {
+            return _experienceReset;
+        }
+
+        Transform root = transform.root;
+        if (root != null)
+        {
+            _experienceReset = root.GetComponentInChildren<AlinaExperienceReset>(true);
+            if (_experienceReset == null)
+            {
+                _experienceReset = root.gameObject.AddComponent<AlinaExperienceReset>();
+            }
+        }
+
+        return _experienceReset;
+    }
+
+    private void EnsureRiverAmbience()
+    {
+        if (riverAmbience != null)
+        {
+            return;
+        }
+
+        riverAmbience = GetComponent<ExperienceRiverAmbience>();
+        if (riverAmbience != null)
+        {
+            return;
+        }
+
+        riverAmbience = GetComponentInParent<ExperienceRiverAmbience>();
+        if (riverAmbience != null)
+        {
+            return;
+        }
+
+        Transform sceneRoot = transform.root;
+        if (sceneRoot != null)
+        {
+            riverAmbience = sceneRoot.GetComponentInChildren<ExperienceRiverAmbience>(true);
+        }
     }
 
     private void EnsureFishOrchestrator()

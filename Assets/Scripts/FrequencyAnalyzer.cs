@@ -163,4 +163,28 @@ public class FrequencyAnalyzer : MonoBehaviour
         for (int i = 0; i < BandCount; i++)
             _peakValues[i] = 0f;
     }
+
+    /// <summary>Restarts the music clip from the beginning for experience replay.</summary>
+    public void RestartPlayback()
+    {
+        ResetCalibration();
+
+        for (int i = 0; i < BandCount; i++)
+        {
+            _smoothedValues[i] = 0f;
+        }
+
+        if (audioSource == null)
+        {
+            return;
+        }
+
+        audioSource.Stop();
+        audioSource.time = 0f;
+
+        if (audioSource.clip != null)
+        {
+            audioSource.Play();
+        }
+    }
 }
