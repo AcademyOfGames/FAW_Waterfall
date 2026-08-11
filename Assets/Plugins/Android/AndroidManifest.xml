@@ -1,36 +1,39 @@
-<?xml version="1.0" encoding="utf-8"?>
-<manifest
-    xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
+﻿<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <!--
+  Recorder permissions: none are needed.
 
-      <!-- Permissions for recorder Plugin start -->
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
-    <uses-permission android:name="android.permission.MODIFY_AUDIO_SETTINGS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  Android recording is InAppScreenRecorder (Unity-side capture + InAppFrameEncoder), not the
+  SmileSoft/MediaProjection plugin, so the whole permission block that shipped with that plugin
+  was dead weight and has been removed:
 
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    WRITE_EXTERNAL_STORAGE              no-op — AndroidMinSdkVersion is 35, and MediaStoreSaver
+                                        inserts the app's own media under scoped storage, which
+                                        needs no permission (see MediaStoreSaver.java).
+    RECORD_AUDIO / MODIFY_AUDIO_SETTINGS the recorder's audio is Unity's own mixed output, tapped
+                                        via OnAudioFilterRead (AudioCaptureTap.cs). Nothing in
+                                        this project opens the mic — there is no Microphone.Start
+                                        or AudioRecord anywhere.
+    FOREGROUND_SERVICE, _MEDIA_PROJECTION,
+    _MICROPHONE, POST_NOTIFICATIONS     existed only for the SmileSoft foreground services that
+                                        were removed below. Also worth keeping out: declaring a
+                                        foreground service type obliges you to fill in Play
+                                        Console's foreground-service declaration form.
+    VIDEO_CAPTURE / AUDIO_CAPTURE       not grantable to normal apps at all (signature|privileged);
+                                        they were never doing anything.
 
-    <uses-permission android:name="android.permission.VIDEO_CAPTURE" />
-    <uses-permission android:name="android.permission.AUDIO_CAPTURE" />
-
-      <!-- Permissions for recorder Plugin end -->
-
-    <application>
-
-
-         <activity android:name="com.unity3d.player.UnityPlayerActivity"
-                  android:theme="@style/UnityThemeSelector">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
-            <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
-        </activity>
-
-        <!--
+  If SmileSoft/MediaProjection recording is ever re-enabled on Android, restore this block and the
+  two <service> declarations together — the plugin needs both.
+  -->
+  <application>
+    <activity android:name="com.unity3d.player.UnityPlayerActivity" android:theme="@style/UnityThemeSelector">
+      <intent-filter>
+        <action android:name="android.intent.action.MAIN" />
+        <category android:name="android.intent.category.LAUNCHER" />
+      </intent-filter>
+      <meta-data android:name="unityplayer.UnityActivity" android:value="true" />
+    </activity>
+    <!--
         Removed: a second <activity android:name="com.unity3d.player.UnityPlayerGameActivity">
         block (Unity's GameActivity boilerplate, referencing @style/BaseUnityGameActivityTheme)
         was here from the plugin's sample manifest. This project uses the classic
@@ -38,38 +41,21 @@
         this build and resource linking failed on it (see build error:
         "resource style/BaseUnityGameActivityTheme ... not found").
         -->
+    <!--
+    Removed: the two SmileSoft MediaProjection foreground services
+    (ScreenRecorderForegroundService / ...Mic) and the androidx FileProvider that backed the
+    plugin's Android share sheet.
 
-        <!-- Service declarations start -->
-        <!-- Service for system audio (mode 1) and no audio (mode 0) - only mediaProjection, no microphone permission needed -->
-         <service
-            android:name="com.SmileSoft.unityplugin.ScreenCapture.ScreenRecorderForegroundService"
-            android:foregroundServiceType="mediaProjection"
-            android:enabled="true"
-            android:exported="true" />
+    Nothing on Android reaches any of them anymore. Recording is InAppScreenRecorder, saving is
+    MediaStoreSaver, and sharing hands the resulting MediaStore content:// URI straight to the OS
+    share sheet (InAppScreenRecorder.ShareLastRecording) — a content URI from MediaStore needs no
+    FileProvider. SmileSoft is now iOS-only (ReplayKit), and FileProvider is an Android-only API,
+    so none of this affects the iOS build.
 
-        <!-- Service for mic audio (mode 2) - requires microphone permission -->
-         <service
-            android:name="com.SmileSoft.unityplugin.ScreenCapture.ScreenRecorderForegroundServiceMic"
-            android:foregroundServiceType="mediaProjection|microphone"
-            android:enabled="true"
-            android:exported="true" />
-
-        <!-- Service End -->
-
-
-         <!-- Provider start -->
-
-         <provider
-            android:name="androidx.core.content.FileProvider"
-            android:authorities="com.SmileSoft.unityplugin.ScreenRecordProvider"
-            android:exported="false"
-            android:grantUriPermissions="true">
-             <meta-data
-             android:name="android.support.FILE_PROVIDER_PATHS"
-             android:resource="@xml/file_provider_paths" />
-            </provider>
-
-         <!-- Provider End -->
-
-    </application>
+    The FileProvider is also what Google Play was rejecting: the plugin hardcodes the authority
+    "com.SmileSoft.unityplugin.ScreenRecordProvider", authorities are globally unique across the
+    Play catalog, and other developers shipping the same plugin already claimed it —
+    "The following content provider authorities are in use by other developers".
+    -->
+  </application>
 </manifest>

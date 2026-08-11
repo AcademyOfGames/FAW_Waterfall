@@ -1,5 +1,6 @@
 using System;
 using System.Collections;
+using System.Runtime.InteropServices;
 using UnityEngine;
 using UnityEngine.UI;
 
@@ -22,6 +23,24 @@ using UnityEngine.UI;
 /// what avoids the "Share your screen with FutureArtsWay?" system dialog. iOS still uses
 /// SmileSoftScreenRecordController/ReplayKit, since ReplayKit doesn't show that blocking consent
 /// dialog in the first place. Requires an InAppScreenRecorder component somewhere in the scene.
+///
+/// Native-overlay wrinkle (both platforms, for different reasons): whatever records the screen
+/// would otherwise capture this button/ring along with everything else. On Android,
+/// InAppScreenRecorder grabs Unity's own rendered frame, so anything Unity itself draws —
+/// including this button's Image/ringFillImage — would appear in the recorded video. On iOS,
+/// ReplayKit is a true system-level screen recorder that captures the full composited screen, so
+/// even a plain native view layered on top would still show up. To keep the button visible to the
+/// user but invisible to the recording on both platforms, this component disables its own
+/// Unity-rendered Image/ring and hands the actual visible button off to a native overlay,
+/// positioned to match this button's existing RectTransform:
+///  - Android: a genuine native Android View (NativeRecordButton.java) added alongside — never
+///    inside — Unity's own rendering surface, which Unity's capture has no way to see.
+///  - iOS: a UITextField with secureTextEntry = YES hosting our content in its protected internal
+///    canvas view (FawRecordButton.mm) — the same content-protection mechanism iOS uses to hide
+///    password fields from screenshots and screen recordings, including ReplayKit.
+/// Both mirror how the FAWCurrents_WebARMain project's recording HUD lives in a plain HTML
+/// element outside its captured &lt;canvas&gt;. All state-machine logic (Idle/Recording/Stopping)
+/// stays here in C#; the native views only draw pixels and forward taps back via UnitySendMessage.
 /// </summary>
 public class ScreenRecordButtonController : MonoBehaviour
 {
@@ -49,6 +68,25 @@ public class ScreenRecordButtonController : MonoBehaviour
     private State _state = State.Idle;
     private Coroutine _fillRoutine;
 
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private const string NativeButtonClassName = "com.FutureArts.FutureArtsWay.inapprecorder.NativeRecordButton";
+    private AndroidJavaObject _nativeButtonAndroid;
+#endif
+
+#if UNITY_IOS && !UNITY_EDITOR
+    [DllImport("__Internal")] private static extern void FawRecordButton_Create(string gameObjectName, int x, int y, int width, int height, int unityScreenWidth);
+    [DllImport("__Internal")] private static extern void FawRecordButton_Show();
+    [DllImport("__Internal")] private static extern void FawRecordButton_Hide();
+    [DllImport("__Internal")] private static extern void FawRecordButton_SetRecording(bool recording);
+    [DllImport("__Internal")] private static extern void FawRecordButton_SetFillAmount(float amount);
+    [DllImport("__Internal")] private static extern void FawRecordButton_Destroy();
+#endif
+
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
+    private bool _nativeButtonReady;
+    private Graphic[] _hiddenGraphics;
+#endif
+
     private void Awake()
     {
         ValidateRefs();
@@ -60,6 +98,14 @@ public class ScreenRecordButtonController : MonoBehaviour
             recordButton.onClick.AddListener(OnButtonTapped);
 
         SmileSoftScreenRecordController.OnIosRecordingProcessing += HandleIosProcessing;
+        SmileSoftScreenRecordController.OnIosRecordStartResult += HandleIosStartResult;
+
+        // Keep the native overlay's visibility in lockstep with this GameObject's active state.
+        // PersistentRecordingRoot hides the whole recording canvas on the main menu by
+        // deactivating it — but the native button is a platform view outside Unity's hierarchy,
+        // so without this it would stay floating over the menu after leaving an experience scene.
+        if (_state == State.Idle)
+            NativeButton_Show();
     }
 
     private void OnDisable()
@@ -68,6 +114,14 @@ public class ScreenRecordButtonController : MonoBehaviour
             recordButton.onClick.RemoveListener(OnButtonTapped);
 
         SmileSoftScreenRecordController.OnIosRecordingProcessing -= HandleIosProcessing;
+        SmileSoftScreenRecordController.OnIosRecordStartResult -= HandleIosStartResult;
+
+        NativeButton_Hide();
+    }
+
+    private void OnDestroy()
+    {
+        NativeButton_Destroy();
     }
 
     private void Start()
@@ -107,6 +161,7 @@ public class ScreenRecordButtonController : MonoBehaviour
                 "Build to a real Android or iOS device to test recording end-to-end.");
         }
 
+        SetupNativeOverlayButton();
         SetIdleVisuals();
     }
 
@@ -125,6 +180,13 @@ public class ScreenRecordButtonController : MonoBehaviour
             case State.Stopping:
                 break;
         }
+    }
+
+    /// <summary>Called via UnitySendMessage from the native Android/iOS record-button overlay (see
+    /// NativeRecordButton.java / FawRecordButton.mm). Do not rename without updating both.</summary>
+    public void OnNativeButtonTapped()
+    {
+        OnButtonTapped();
     }
 
     // ── Recording lifecycle ─────────────────────────────────────────────────
@@ -159,6 +221,15 @@ public class ScreenRecordButtonController : MonoBehaviour
 
             string videoName = "Record_" + DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss");
             ctrl.SetVideoName(videoName);
+
+            // Match what Android's InAppScreenRecorder records: the app's own audio, no
+            // microphone. SystemAudio keeps the experience's sound in the clip without triggering
+            // the iOS mic-permission prompt or picking up room noise. Set here (rather than in
+            // Start()) because the plugin's EasyScreenRecordInitializer also writes this setting
+            // from its own Start() — the value is only read at record-start, so this is the one
+            // spot where we always win. Switch to MicAudio if narration over recordings is wanted.
+            ctrl.SetAudioRecordingMode(SmileSoftScreenRecordController.AudioRecordingMode.SystemAudio);
+
             ctrl.StartRecording();
         }
 
@@ -222,6 +293,8 @@ public class ScreenRecordButtonController : MonoBehaviour
                 "GameObject (or that component/GameObject is disabled), so the preview will never show.");
         }
 
+        NativeButton_Hide();
+
         // Hand off to the preview flow. This button hides itself; ResetToIdle() brings it back
         // after Discard, or after Save/Share completes.
         //
@@ -245,6 +318,38 @@ public class ScreenRecordButtonController : MonoBehaviour
             processingIndicator.SetActive(true);
     }
 
+    /// <summary>
+    /// iOS only — result of the asynchronous ReplayKit start (see
+    /// <see cref="SmileSoftScreenRecordController.OnIosRecordStartResult"/>). BeginRecording()
+    /// flipped the UI to the recording state optimistically at tap time; this either syncs the
+    /// ring timer to the moment capture actually began (the first-ever start sits behind a system
+    /// consent alert, which can add seconds), or unwinds back to idle if the start failed —
+    /// without this, a denied consent alert left the button stuck showing a recording that
+    /// wasn't happening.
+    /// </summary>
+    private void HandleIosStartResult(bool success)
+    {
+        if (_state != State.Recording)
+            return;
+
+        if (_fillRoutine != null)
+        {
+            StopCoroutine(_fillRoutine);
+            _fillRoutine = null;
+        }
+
+        if (success)
+        {
+            _fillRoutine = StartCoroutine(FillRoutine()); // restart the cap timer from the real start
+            return;
+        }
+
+        Debug.LogWarning("[ScreenRecordButtonController] iOS recording failed to start (consent " +
+            "denied or ReplayKit unavailable) — resetting the button to idle.");
+        _state = State.Idle;
+        SetIdleVisuals();
+    }
+
     /// <summary>Call after Discard, or after the share popup finishes, to show the button again.</summary>
     public void ResetToIdle()
     {
@@ -258,6 +363,7 @@ public class ScreenRecordButtonController : MonoBehaviour
         if (ringFillImage != null)
             ringFillImage.gameObject.SetActive(true);
         SetIdleVisuals();
+        NativeButton_Show();
     }
 
     // ── Ring fill ────────────────────────────────────────────────────────────
@@ -267,12 +373,15 @@ public class ScreenRecordButtonController : MonoBehaviour
         float elapsed = 0f;
         if (ringFillImage != null)
             ringFillImage.fillAmount = 0f;
+        NativeButton_SetFillAmount(0f);
 
         while (elapsed < maxRecordSeconds)
         {
             elapsed += Time.deltaTime;
+            float amount = Mathf.Clamp01(elapsed / maxRecordSeconds);
             if (ringFillImage != null)
-                ringFillImage.fillAmount = Mathf.Clamp01(elapsed / maxRecordSeconds);
+                ringFillImage.fillAmount = amount;
+            NativeButton_SetFillAmount(amount);
             yield return null;
         }
 
@@ -301,6 +410,9 @@ public class ScreenRecordButtonController : MonoBehaviour
 
         if (ringFillImage != null)
             ringFillImage.fillAmount = 0f;
+
+        NativeButton_SetRecording(false);
+        NativeButton_SetFillAmount(0f);
     }
 
     private void SetRecordingVisuals()
@@ -320,7 +432,163 @@ public class ScreenRecordButtonController : MonoBehaviour
         {
             buttonIconImage.sprite = recordingIconSprite;
         }
+
+        NativeButton_SetRecording(true);
     }
+
+    // ── Native overlay (Android + iOS) ──────────────────────────────────────
+    //
+    // These wrapper methods are the only place that branches by platform — every call site above
+    // just calls them plainly. Each is a no-op on platforms/builds where the native overlay isn't
+    // applicable (Editor, standalone, etc.).
+
+    /// <summary>
+    /// Disables Unity's own rendering of this button's Image and its ring (so neither
+    /// InAppScreenRecorder nor ReplayKit ever sees them — see the class doc comment above), then
+    /// creates a native overlay positioned to exactly match this button's existing on-screen rect
+    /// and hands visible/tap duties off to it. If anything here fails, falls back to leaving the
+    /// Unity UI button visible (and interactable) — meaning the button would show up in
+    /// recordings, but at least the app keeps working rather than losing the record button
+    /// entirely.
+    /// </summary>
+    private void SetupNativeOverlayButton()
+    {
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
+        if (buttonIconImage == null || ringFillImage == null)
+            return;
+
+        // Disable every Graphic Unity would otherwise render for this button — not just
+        // buttonIconImage. This GameObject also carries its own separate background Image (the
+        // white circle sprite behind the icon) that isn't referenced by any field here; missing
+        // it meant that background stayed Unity-rendered and still showed up in recordings even
+        // after the icon and ring were hidden. GetComponentsInChildren catches all of them (self +
+        // any children) in one sweep instead of needing a dedicated field per graphic.
+        _hiddenGraphics = GetComponentsInChildren<Graphic>(true);
+        foreach (var g in _hiddenGraphics)
+            g.enabled = false;
+        ringFillImage.enabled = false;
+        if (recordButton != null)
+            recordButton.interactable = false; // taps now come through the native view instead
+
+        // Size/position the native overlay from the union of this button's own outer
+        // RectTransform and the ring's RectTransform — NOT the (smaller, centered) icon child's
+        // rect, which is what was used before and made the native ring render shrunk toward the
+        // middle instead of hugging the outer edge of the button.
+        Rect buttonRect = GetScreenPixelRect((RectTransform)transform);
+        Rect ringRect = GetScreenPixelRect(ringFillImage.rectTransform);
+        Rect pixelRect = Rect.MinMaxRect(
+            Mathf.Min(buttonRect.xMin, ringRect.xMin),
+            Mathf.Min(buttonRect.yMin, ringRect.yMin),
+            Mathf.Max(buttonRect.xMax, ringRect.xMax),
+            Mathf.Max(buttonRect.yMax, ringRect.yMax));
+
+        try
+        {
+#if UNITY_ANDROID
+            _nativeButtonAndroid = new AndroidJavaObject(NativeButtonClassName);
+            using var activity = GetCurrentActivity();
+            _nativeButtonAndroid.Call("create", activity, gameObject.name,
+                (int)pixelRect.x, (int)pixelRect.y, (int)pixelRect.width, (int)pixelRect.height);
+#elif UNITY_IOS
+            // Screen.width rides along so the native side can convert these device-pixel values
+            // into UIKit points (see FawRecordButton.mm) — without it the overlay renders 2-3x too
+            // big on Retina displays.
+            FawRecordButton_Create(gameObject.name,
+                (int)pixelRect.x, (int)pixelRect.y, (int)pixelRect.width, (int)pixelRect.height,
+                Screen.width);
+#endif
+            _nativeButtonReady = true;
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("[ScreenRecordButtonController] Failed to create the native record button " +
+                "overlay — falling back to the Unity UI button (it will show up in recordings). " +
+                "Exception: " + e);
+            foreach (var g in _hiddenGraphics)
+                g.enabled = true;
+            ringFillImage.enabled = true;
+            if (recordButton != null)
+                recordButton.interactable = true;
+            _nativeButtonReady = false;
+        }
+#endif
+    }
+
+    private void NativeButton_Show()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        _nativeButtonAndroid?.Call("show");
+#elif UNITY_IOS && !UNITY_EDITOR
+        if (_nativeButtonReady) FawRecordButton_Show();
+#endif
+    }
+
+    private void NativeButton_Hide()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        _nativeButtonAndroid?.Call("hide");
+#elif UNITY_IOS && !UNITY_EDITOR
+        if (_nativeButtonReady) FawRecordButton_Hide();
+#endif
+    }
+
+    private void NativeButton_SetRecording(bool recording)
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        _nativeButtonAndroid?.Call("setRecording", recording);
+#elif UNITY_IOS && !UNITY_EDITOR
+        if (_nativeButtonReady) FawRecordButton_SetRecording(recording);
+#endif
+    }
+
+    private void NativeButton_SetFillAmount(float amount)
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        _nativeButtonAndroid?.Call("setFillAmount", amount);
+#elif UNITY_IOS && !UNITY_EDITOR
+        if (_nativeButtonReady) FawRecordButton_SetFillAmount(amount);
+#endif
+    }
+
+    private void NativeButton_Destroy()
+    {
+#if UNITY_ANDROID && !UNITY_EDITOR
+        _nativeButtonAndroid?.Call("destroy");
+        _nativeButtonAndroid?.Dispose();
+        _nativeButtonAndroid = null;
+#elif UNITY_IOS && !UNITY_EDITOR
+        if (_nativeButtonReady) FawRecordButton_Destroy();
+        _nativeButtonReady = false;
+#endif
+    }
+
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
+    /// <summary>
+    /// For a Screen Space - Overlay RectTransform, world corners are already screen pixel
+    /// coordinates — no camera/canvas conversion needed. Unity's screen space has a bottom-left
+    /// origin; both Android View and iOS UIKit coordinates have a top-left origin, hence the Y
+    /// flip below.
+    /// </summary>
+    private static Rect GetScreenPixelRect(RectTransform rt)
+    {
+        Vector3[] corners = new Vector3[4];
+        rt.GetWorldCorners(corners);
+        float minX = Mathf.Min(corners[0].x, corners[2].x);
+        float maxX = Mathf.Max(corners[0].x, corners[2].x);
+        float minY = Mathf.Min(corners[0].y, corners[2].y);
+        float maxY = Mathf.Max(corners[0].y, corners[2].y);
+        float topY = Screen.height - maxY;
+        return new Rect(minX, topY, maxX - minX, maxY - minY);
+    }
+#endif
+
+#if UNITY_ANDROID && !UNITY_EDITOR
+    private static AndroidJavaObject GetCurrentActivity()
+    {
+        using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
+        return unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
+    }
+#endif
 
     // ── Validation ───────────────────────────────────────────────────────────
 

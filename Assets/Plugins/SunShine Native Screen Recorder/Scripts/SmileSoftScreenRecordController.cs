@@ -53,6 +53,15 @@ public class SmileSoftScreenRecordController : MonoBehaviour
     public static event Action<string> OnIosRecordingSaved;
 
     /// <summary>
+    /// Fired on iOS with the result of a StartRecording() attempt: true means ReplayKit is now
+    /// actually capturing; false means it failed to start (user denied the consent alert,
+    /// recording unavailable, etc.). ReplayKit's start is asynchronous — and the first attempt
+    /// sits behind a system consent alert — so UI that flipped to a "recording" state on tap
+    /// should listen to this to either sync its timer to the real start or bail back to idle.
+    /// </summary>
+    public static event Action<bool> OnIosRecordStartResult;
+
+    /// <summary>
     /// Fired when the native plugin auto-stops recording because the free-version
     /// duration limit was reached (Android and iOS). The string parameter is the absolute local file path of the
     /// saved partial recording. Subscribe from your UI layer (e.g. <see cref="ExampleScreenRecorder"/>)
@@ -70,7 +79,10 @@ public class SmileSoftScreenRecordController : MonoBehaviour
 
     // ── Android ───────────────────────────────────────────────────────────────
 
-    private readonly string _fileProvider = "com.SmileSoft.unityplugin.ScreenRecordProvider";
+    // Removed: the plugin's FileProvider authority constant
+    // ("com.SmileSoft.unityplugin.ScreenRecordProvider"), which was passed to the native
+    // ShareVideo call. Both the <provider> and that share path are gone — see ShareVideo below.
+
     private AndroidJavaObject _screenRecorder;
 
     // ── iOS internal ──────────────────────────────────────────────────────────
@@ -369,19 +381,27 @@ public class SmileSoftScreenRecordController : MonoBehaviour
 
     // ── Share ─────────────────────────────────────────────────────────────────
 
-   public void ShareVideo(string filePath, string message, string title)
-{
-    if (IsAndroidPlatform() && filePath != null && File.Exists(filePath))
+    /// <summary>
+    /// iOS only. The Android branch (native ShareVideo via the plugin's FileProvider) was removed
+    /// along with the <provider> in Plugins/Android/AndroidManifest.xml — Android shares through
+    /// InAppScreenRecorder.ShareLastRecording(), which passes a MediaStore content:// URI to the
+    /// OS share sheet and needs no FileProvider. SharePopupController already routes Android
+    /// there, so nothing called this path.
+    /// </summary>
+    public void ShareVideo(string filePath, string message, string title)
     {
-        _screenRecorder?.Call("ShareVideo", filePath, message, title, _fileProvider);
-        return;
-    }
+        if (IsAndroidPlatform())
+        {
+            Debug.LogWarning("[SmileSoftScreenRecordController] ShareVideo() is iOS-only. On " +
+                "Android use InAppScreenRecorder.instance.ShareLastRecording().");
+            return;
+        }
 
-    if (IsIosPlatform() && !string.IsNullOrEmpty(filePath))
-    {
-        ReplayKitBridge.ShareVideo(filePath); // message/title ignored — native share sheet handles UI
+        if (IsIosPlatform() && !string.IsNullOrEmpty(filePath))
+        {
+            ReplayKitBridge.ShareVideo(filePath); // message/title ignored — native share sheet handles UI
+        }
     }
-}
 
     // ── Availability ──────────────────────────────────────────────────────────
 
@@ -490,6 +510,7 @@ public class SmileSoftScreenRecordController : MonoBehaviour
         Debug.Log(success
             ? "[SmileSoftScreenRecordController] iOS recording started."
             : "[SmileSoftScreenRecordController] iOS recording failed to start.");
+        OnIosRecordStartResult?.Invoke(success);
     }
 }
 

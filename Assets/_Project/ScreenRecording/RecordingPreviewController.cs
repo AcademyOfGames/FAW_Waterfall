@@ -43,6 +43,12 @@ public class RecordingPreviewController : MonoBehaviour
             videoPlayer.playOnAwake = false;
             videoPlayer.isLooping = true;
             videoPlayer.renderMode = VideoRenderMode.RenderTexture;
+            // Previously unconfigured (defaults to no audio output at all), so even once
+            // InAppScreenRecorder started muxing an audio track into the recording (Android) — or
+            // for the audio ReplayKit already captures on iOS — nothing would actually play back
+            // during this looping preview. Direct routes decoded audio straight to the device's
+            // audio output with no extra AudioSource wiring needed.
+            videoPlayer.audioOutputMode = VideoAudioOutputMode.Direct;
             videoPlayer.prepareCompleted += HandlePrepared;
             videoPlayer.errorReceived += HandleVideoError;
         }
@@ -87,6 +93,11 @@ public class RecordingPreviewController : MonoBehaviour
 
     private void OnDestroy()
     {
+        // Safety net: don't let the game's audio stay muted forever if this object is destroyed
+        // (or the app is torn down) while the preview happens to be open.
+        if (previewRoot != null && previewRoot.activeSelf)
+            AudioListener.pause = false;
+
         if (_renderTexture != null)
         {
             if (videoPlayer != null && videoPlayer.targetTexture == _renderTexture)
@@ -124,6 +135,13 @@ public class RecordingPreviewController : MonoBehaviour
         }
 
         EnsureRenderTexture();
+
+        // Mute the game's own audio while the recording's audio plays back — otherwise both play
+        // at once. AudioListener.pause only stops Unity's AudioSource-driven audio; the VideoPlayer
+        // is in VideoAudioOutputMode.Direct, which routes straight to the device's audio output
+        // outside Unity's AudioListener/AudioSource pipeline, so the preview's own audio is
+        // unaffected by this.
+        AudioListener.pause = true;
 
         previewRoot.SetActive(true);
         // Share/Discard aren't necessarily children of previewRoot in the scene hierarchy
@@ -199,6 +217,9 @@ public class RecordingPreviewController : MonoBehaviour
         if (shareButton != null) shareButton.gameObject.SetActive(false);
         if (discardButton != null) discardButton.gameObject.SetActive(false);
         _currentFilePath = null;
+
+        // Resume the game's own audio now that the recording's audio playback has stopped.
+        AudioListener.pause = false;
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
