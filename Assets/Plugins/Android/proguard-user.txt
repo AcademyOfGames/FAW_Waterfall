@@ -83,6 +83,46 @@
 
 ### Module Progurad Rules ends ###
 
+### SmileSoft Screen Recorder — manual keep rule ###
+# The plugin's own bundled proguard.txt is empty, and SmileSoftScreenRecordController reaches
+# these classes only via reflection (new AndroidJavaObject("com.SmileSoft.unityplugin...")),
+# which R8 can't see as "used". Without this, AndroidMinifyRelease strips the class and every
+# native call becomes a silent no-op at runtime (ClassNotFoundException in logcat).
+-keep class com.SmileSoft.unityplugin.** { *; }
+### SmileSoft Screen Recorder — manual keep rule ends ###
+
+### In-app screen recorder (InAppScreenRecorder.cs) — manual keep rule ###
+# Same issue as above: InAppScreenRecorder.cs only ever reaches InAppFrameEncoder/MediaStoreSaver
+# via reflection (new AndroidJavaObject("com.FutureArts.FutureArtsWay.inapprecorder....")), so R8
+# has no static call-graph reference to them and will strip both classes under
+# AndroidMinifyRelease, turning every recording call into a silent no-op / ClassNotFoundException.
+-keep class com.FutureArts.FutureArtsWay.inapprecorder.** { *; }
+### In-app screen recorder — manual keep rule ends ###
+
+### Module Progurad Rules starts ###
+
+## Default ##
+-keep class com.unity3d.plugin.* { *; }
+
+## LocationModule ##
+-keep class com.google.android.gms.common.** { *; }
+                    -keep class com.google.android.gms.location.** { *; }
+                    -keep class com.google.android.gms.tasks.** { *; }
+
+### Module Progurad Rules ends ###
+
+### Module Progurad Rules starts ###
+
+## Default ##
+-keep class com.unity3d.plugin.* { *; }
+
+## LocationModule ##
+-keep class com.google.android.gms.common.** { *; }
+                    -keep class com.google.android.gms.location.** { *; }
+                    -keep class com.google.android.gms.tasks.** { *; }
+
+### Module Progurad Rules ends ###
+
 ### Module Progurad Rules starts ###
 
 ## Default ##

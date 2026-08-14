@@ -43,6 +43,10 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     [SerializeField] private bool forceDivineSceneGeofence;
     [Tooltip("When runtime HUD is built, add on-screen toggles for force-geofence overrides.")]
     [SerializeField] private bool buildRuntimeForceGeofenceToggles = true;
+    [Header("Screen record (SunShine example demo)")]
+    [SerializeField] private ExampleScreenRecorder exampleScreenRecorder;
+    [Tooltip("Root toggled on in experience scenes and off on StartScene (usually the demo Canvas).")]
+    [SerializeField] private GameObject screenRecordUiRoot;
 
     [Header("Editor-only location simulator")]
     [Tooltip("When enabled, Play Mode in the Unity Editor uses simulated lat/lon instead of Input.location. Ignored in all player builds (Application.isEditor is false).")]
@@ -118,6 +122,12 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
         if (hud == null && buildRuntimeUiIfMissing)
             hud = GeofenceRuntimeUiBuilder.Build(transform, this, buildRuntimeForceGeofenceToggles);
 
+        if (exampleScreenRecorder == null)
+            exampleScreenRecorder = GetComponentInChildren<ExampleScreenRecorder>(true);
+        if (screenRecordUiRoot == null && exampleScreenRecorder != null)
+            screenRecordUiRoot = FindScreenRecordCanvasRoot();
+        UpdateScreenRecordUiForScene(SceneManager.GetActiveScene().name);
+
         if (developerSceneUnlock == null)
             developerSceneUnlock = FindFirstObjectByType<DeveloperSceneUnlockButton>();
         if (developerSceneUnlock != null)
@@ -133,6 +143,16 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
             $"editorLocSim={(UseSimulatedLocation ? "on" : "off")} forceGeofence={(TryGetForcedGeofence(out var forced) ? forced.SceneName : "off")}");
     }
 
+    private void OnEnable()
+    {
+        SceneManager.sceneLoaded += HandleSceneLoadedForScreenRecord;
+    }
+
+    private void OnDisable()
+    {
+        SceneManager.sceneLoaded -= HandleSceneLoadedForScreenRecord;
+    }
+
     private void OnDestroy()
     {
         if (sceneLoader != null)
@@ -140,6 +160,42 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
             sceneLoader.OnNotify -= OnSceneLoaderNotify;
             sceneLoader.OnSceneLoadSucceeded -= OnExperienceSceneLoaded;
         }
+    }
+
+    private void HandleSceneLoadedForScreenRecord(Scene scene, LoadSceneMode mode)
+    {
+        UpdateScreenRecordUiForScene(scene.name);
+    }
+
+    private static bool IsExperienceScene(string sceneName)
+    {
+        if (string.IsNullOrEmpty(sceneName))
+            return false;
+        if (string.Equals(sceneName, "StartScene", System.StringComparison.Ordinal))
+            return false;
+        return true;
+    }
+
+    private void UpdateScreenRecordUiForScene(string sceneName)
+    {
+        if (screenRecordUiRoot == null)
+            return;
+
+        screenRecordUiRoot.SetActive(IsExperienceScene(sceneName));
+    }
+
+    private GameObject FindScreenRecordCanvasRoot()
+    {
+        foreach (var canvas in GetComponentsInChildren<Canvas>(true))
+        {
+            if (hud != null && canvas.gameObject == hud.gameObject)
+                continue;
+            if (menuCanvasToHideAfterLoad != null && canvas == menuCanvasToHideAfterLoad)
+                continue;
+            return canvas.gameObject;
+        }
+
+        return null;
     }
 
     private void OnExperienceSceneLoaded(string sceneName)

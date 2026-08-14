@@ -8376,7 +8376,7 @@ MonoBehaviour:
   blendShapeTimelineStartSeconds: 40
   blendShapeTimelineDurationSeconds: 2
   blendWeightZeroAtMul: 3
-  blendShapeDebugLogging: 1
+  blendShapeDebugLogging: 0
 --- !u!82 &1202897577
 AudioSource:
   m_ObjectHideFlags: 0

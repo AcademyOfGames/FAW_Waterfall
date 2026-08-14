@@ -21,6 +21,12 @@ public class LogToTMP : MonoBehaviour
 
     private void HandleLog(string condition, string stackTrace, LogType type)
     {
+        // logText is unassigned in some scenes (e.g. devScene) — bail out silently. Do NOT log
+        // here (Debug.LogWarning/Error would re-enter this same handler via
+        // Application.logMessageReceived and recurse).
+        if (logText == null)
+            return;
+
         string formattedLog = $"[{type}] {condition}";
 
         logQueue.Enqueue(formattedLog);
