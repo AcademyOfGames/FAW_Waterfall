@@ -2,23 +2,28 @@ using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using UnityEngine;
 using UnityEngine.Rendering;
 
 /// <summary>
-/// Android in-app screen recorder — replaces SmileSoftScreenRecordController on Android only.
+/// Cross-platform in-app screen recorder (Android + iOS) — the single recording path for both.
 ///
 /// Captures Unity's own already-rendered frames (ScreenCapture.CaptureScreenshotIntoRenderTexture
 /// + AsyncGPUReadback, i.e. a copy of Unity's own back buffer) and encodes them on-device with a
-/// custom H.264 encoder (see InAppFrameEncoder.java). This never calls Android's MediaProjection
-/// screen-capture broker, so the "Share your screen with FutureArtsWay?" system consent dialog
-/// never appears — the app is only encoding pixels it already produced itself, not asking the OS
-/// for a mirror of the display compositor.
+/// native H.264 encoder — InAppFrameEncoder.java (Android, MediaCodec) or InAppFrameEncoder.mm
+/// (iOS, AVAssetWriter). The frame capture, RGBA→I420 conversion and audio tap are all shared C#;
+/// only the four EncoderConfigure/PushFrame/PushAudio/Stop calls differ per platform.
 ///
-/// iOS keeps using SmileSoftScreenRecordController/ReplayKit — ReplayKit's in-app capture doesn't
-/// show a blocking consent dialog (just a small red status-bar indicator), so there was never a
-/// dialog problem to solve there.
+/// Recording Unity's OWN frames (rather than the composited screen) is what keeps native overlays
+/// out of the video: the in-app record button (a native Android View / iOS UIView, see
+/// FawRecordButton.mm and NativeRecordButton.java) is never rendered into Unity's RenderTexture, so
+/// it can't appear in the recording. On iOS this replaced ReplayKit, whose whole-screen system
+/// capture had no way to exclude that button. It also means no OS screen-capture broker is involved
+/// on either platform — no "Share your screen with FutureArtsWay?" consent dialog (Android's
+/// MediaProjection) and no ReplayKit consent alert (iOS): the app only encodes pixels it already
+/// produced itself.
 ///
 /// Also captures Unity's own audio output (see AudioCaptureTap.cs) and muxes it into the same mp4
 /// alongside the video track — again without MediaProjection/AudioPlaybackCaptureConfiguration,
@@ -75,7 +80,7 @@ public class InAppScreenRecorder : MonoBehaviour
 
     public bool IsRecording { get; private set; }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
     /// <summary>How many captured frames may be somewhere between "readback requested" and
     /// "handed to MediaCodec" at once. This is the pipeline's backpressure valve: AsyncGPUReadback
     /// on mobile GLES3 typically lands 2-3 render frames after the request, so anything less than
@@ -89,7 +94,9 @@ public class InAppScreenRecorder : MonoBehaviour
     // encode target; we GPU-Blit from _fullResRT down into it every frame.
     private RenderTexture _fullResRT;
     private RenderTexture _captureRT;
+#if UNITY_ANDROID
     private AndroidJavaObject _encoder;
+#endif
     private Coroutine _captureRoutine;
     private double _recordingStartRealtime;
     private int _fullResWidth;
@@ -97,6 +104,10 @@ public class InAppScreenRecorder : MonoBehaviour
     private int _captureWidth;
     private int _captureHeight;
     private int _rgbaBufferSize;
+    // Whether the AsyncGPUReadback rows come back bottom-to-top (and so need flipping to be upright).
+    // True on OpenGL/GLES (Android), false on Metal/Vulkan/D3D (iOS). Snapshotted at StartRecording
+    // so the encode thread reads a plain bool rather than calling into the engine off the main thread.
+    private bool _flipCaptureVertically;
     private AudioCaptureTap _audioTap;
     // Snapshotted at StartRecording so the encode thread never has to touch the AudioCaptureTap
     // component: `unityObject != null` is an overloaded operator that calls into native engine code
@@ -137,6 +148,112 @@ public class InAppScreenRecorder : MonoBehaviour
 #endif
     private Action<string> _pendingStopCallback;
 
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
+#if UNITY_IOS
+    // Absolute path of the clip being written this session. iOS's native encoder stop() returns
+    // only success/failure (not the path, the way the Android one does), so we remember it.
+    private string _outputPath;
+    // Local file path of the most recently finished clip — used by the iOS share sheet.
+    private string _lastLocalPath;
+    private bool _encoderConfigured;
+
+    [DllImport("__Internal")] private static extern bool IAFE_Configure(string outPath, int width, int height, int fps, int bitRate, int audioSampleRate, int audioChannelCount);
+    [DllImport("__Internal")] private static extern bool IAFE_PushFrame(sbyte[] i420, int length, long ptsUs);
+    [DllImport("__Internal")] private static extern bool IAFE_PushAudio(short[] pcm, int sampleCount, long ptsUs);
+    [DllImport("__Internal")] private static extern bool IAFE_Stop();
+    [DllImport("__Internal")] private static extern void IAFE_SaveToPhotos(string path);
+    [DllImport("__Internal")] private static extern void IAFE_ShareVideo(string path, string title);
+#endif
+
+    // ── Native encoder abstraction ────────────────────────────────────────────
+    // The capture pipeline, RGBA→I420 conversion and audio tap are all shared; only these calls
+    // differ per platform. Android talks to InAppFrameEncoder.java over JNI; iOS talks to
+    // InAppFrameEncoder.mm over [DllImport("__Internal")].
+
+    private bool EncoderConfigure(string outPath, int width, int height, int fps, int bitrate,
+        bool swapUV, int audioSampleRate, int audioChannelCount)
+    {
+#if UNITY_ANDROID
+        try
+        {
+            _encoder = new AndroidJavaObject(EncoderClassName);
+        }
+        catch (Exception e)
+        {
+            Debug.LogError("[InAppScreenRecorder] Failed to construct native encoder (" + EncoderClassName +
+                "). Make sure InAppFrameEncoder.java is present under Assets/Plugins/Android/com/FutureArts/" +
+                "FutureArtsWay/inapprecorder/ and the project has been rebuilt since adding it. Exception: " + e);
+            return false;
+        }
+        bool ok = _encoder.Call<bool>("configure", outPath, width, height, fps, bitrate, swapUV, audioSampleRate, audioChannelCount);
+        if (!ok)
+        {
+            _encoder.Dispose();
+            _encoder = null;
+        }
+        return ok;
+#elif UNITY_IOS
+        _outputPath = outPath;
+        _encoderConfigured = IAFE_Configure(outPath, width, height, fps, bitrate, audioSampleRate, audioChannelCount);
+        return _encoderConfigured;
+#else
+        return false;
+#endif
+    }
+
+    private bool EncoderReady()
+    {
+#if UNITY_ANDROID
+        return _encoder != null;
+#elif UNITY_IOS
+        return _encoderConfigured;
+#else
+        return false;
+#endif
+    }
+
+    private bool EncoderPushFrame(sbyte[] i420, long pts)
+    {
+#if UNITY_ANDROID
+        return _encoder != null && _encoder.Call<bool>("pushFrame", i420, pts);
+#elif UNITY_IOS
+        return _encoderConfigured && IAFE_PushFrame(i420, i420.Length, pts);
+#else
+        return false;
+#endif
+    }
+
+    private bool EncoderPushAudio(short[] pcm, long pts)
+    {
+#if UNITY_ANDROID
+        return _encoder != null && _encoder.Call<bool>("pushAudioSamples", pcm, pts);
+#elif UNITY_IOS
+        return _encoderConfigured && IAFE_PushAudio(pcm, pcm.Length, pts);
+#else
+        return false;
+#endif
+    }
+
+    /// <summary>Finalizes the mp4 and returns its path (or null on failure).</summary>
+    private string EncoderStop()
+    {
+#if UNITY_ANDROID
+        if (_encoder == null) return null;
+        string path = _encoder.Call<string>("stop");
+        _encoder.Dispose();
+        _encoder = null;
+        return path;
+#elif UNITY_IOS
+        if (!_encoderConfigured) return null;
+        bool ok = IAFE_Stop();
+        _encoderConfigured = false;
+        return ok ? _outputPath : null;
+#else
+        return null;
+#endif
+    }
+#endif
+
     private void Awake()
     {
         if (instance != null && instance != this)
@@ -147,12 +264,12 @@ public class InAppScreenRecorder : MonoBehaviour
         }
         instance = this;
 
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
         SetupAudioTap();
 #endif
     }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
     /// <summary>
     /// Finds the currently loaded scene's AudioListener and attaches an AudioCaptureTap to the same
     /// GameObject — that's what lets OnAudioFilterRead see the fully mixed, post-everything audio
@@ -183,7 +300,7 @@ public class InAppScreenRecorder : MonoBehaviour
 
     private void Update()
     {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
         if (!IsRecording || _audioTap == null)
             return;
 
@@ -205,8 +322,8 @@ public class InAppScreenRecorder : MonoBehaviour
             return;
         }
 
-#if !UNITY_ANDROID || UNITY_EDITOR
-        Debug.LogWarning("[InAppScreenRecorder] StartRecording() is only implemented for Android device " +
+#if (!UNITY_ANDROID && !UNITY_IOS) || UNITY_EDITOR
+        Debug.LogWarning("[InAppScreenRecorder] StartRecording() is only implemented for Android/iOS device " +
             "builds — no-op in the Editor or on other platforms.");
 #else
         if (!SystemInfo.supportsAsyncGPUReadback)
@@ -218,6 +335,12 @@ public class InAppScreenRecorder : MonoBehaviour
 
         _fullResWidth = RoundToEven(Screen.width);
         _fullResHeight = RoundToEven(Screen.height);
+
+        // AsyncGPUReadback returns rows in the graphics API's native texture order: bottom-to-top on
+        // OpenGL/GLES (Android), top-to-bottom on Metal/Vulkan/D3D (iOS). graphicsUVStartsAtTop is
+        // false for the former, true for the latter — so we flip only when it starts at the bottom,
+        // otherwise the video comes out upside-down (GLES stays flipped as before; Metal doesn't).
+        _flipCaptureVertically = !SystemInfo.graphicsUVStartsAtTop;
 
         _captureWidth = _fullResWidth;
         _captureHeight = _fullResHeight;
@@ -231,18 +354,6 @@ public class InAppScreenRecorder : MonoBehaviour
         string fileName = "InAppRecord_" + DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss") + ".mp4";
         string outputPath = Path.Combine(Application.temporaryCachePath, fileName);
 
-        try
-        {
-            _encoder = new AndroidJavaObject(EncoderClassName);
-        }
-        catch (Exception e)
-        {
-            Debug.LogError("[InAppScreenRecorder] Failed to construct native encoder (" + EncoderClassName +
-                "). Make sure InAppFrameEncoder.java is present under Assets/Plugins/Android/com/FutureArts/" +
-                "FutureArtsWay/inapprecorder/ and the project has been rebuilt since adding it. Exception: " + e);
-            return;
-        }
-
         // Re-resolve against whatever scene is loaded right now — see SetupAudioTap()'s remarks on
         // why a tap cached in Awake() is stale as soon as the first experience scene loads.
         SetupAudioTap();
@@ -255,14 +366,11 @@ public class InAppScreenRecorder : MonoBehaviour
             _audioChannelCount = Mathf.Max(1, _audioTap.ChannelCount);
         }
 
-        bool configured = _encoder.Call<bool>("configure", outputPath, _captureWidth, _captureHeight, frameRate,
-            bitrate, swapUAndVPlanes, _audioSampleRate, _audioChannelCount);
-        if (!configured)
+        if (!EncoderConfigure(outputPath, _captureWidth, _captureHeight, frameRate,
+                bitrate, swapUAndVPlanes, _audioSampleRate, _audioChannelCount))
         {
-            Debug.LogError("[InAppScreenRecorder] Native configure() returned false — check logcat for the " +
-                "\"InAppFrameEncoder\" tag for the underlying exception.");
-            _encoder.Dispose();
-            _encoder = null;
+            Debug.LogError("[InAppScreenRecorder] Native encoder configure() failed — aborting. " +
+                "Android: check logcat \"InAppFrameEncoder\". iOS: check the Xcode console \"[InAppFrameEncoder]\" logs.");
             return;
         }
 
@@ -309,8 +417,8 @@ public class InAppScreenRecorder : MonoBehaviour
     {
         _pendingStopCallback = callback;
 
-#if !UNITY_ANDROID || UNITY_EDITOR
-        Debug.LogWarning("[InAppScreenRecorder] StopRecording() is only implemented for Android device builds.");
+#if (!UNITY_ANDROID && !UNITY_IOS) || UNITY_EDITOR
+        Debug.LogWarning("[InAppScreenRecorder] StopRecording() is only implemented for Android/iOS device builds.");
         InvokePendingCallback(string.Empty);
 #else
         if (!IsRecording)
@@ -333,12 +441,11 @@ public class InAppScreenRecorder : MonoBehaviour
 #endif
     }
 
-    /// <summary>Android-only: hands LastSavedContentUri off to the native OS share sheet.</summary>
+    /// <summary>Hands the most recent recording off to the native OS share sheet
+    /// (Android: the saved gallery content:// URI; iOS: the local file via UIActivityViewController).</summary>
     public void ShareLastRecording(string chooserTitle)
     {
-#if !UNITY_ANDROID || UNITY_EDITOR
-        Debug.LogWarning("[InAppScreenRecorder] ShareLastRecording() is Android-only.");
-#else
+#if UNITY_ANDROID && !UNITY_EDITOR
         if (string.IsNullOrEmpty(LastSavedContentUri))
         {
             Debug.LogError("[InAppScreenRecorder] ShareLastRecording(): no saved content URI available — " +
@@ -355,6 +462,15 @@ public class InAppScreenRecorder : MonoBehaviour
         {
             Debug.LogError("[InAppScreenRecorder] ShareLastRecording() failed: " + e);
         }
+#elif UNITY_IOS && !UNITY_EDITOR
+        if (string.IsNullOrEmpty(_lastLocalPath))
+        {
+            Debug.LogError("[InAppScreenRecorder] ShareLastRecording(): no recorded file path available.");
+            return;
+        }
+        IAFE_ShareVideo(_lastLocalPath, chooserTitle);
+#else
+        Debug.LogWarning("[InAppScreenRecorder] ShareLastRecording() is only implemented for Android/iOS device builds.");
 #endif
     }
 
@@ -365,7 +481,7 @@ public class InAppScreenRecorder : MonoBehaviour
         cb?.Invoke(path);
     }
 
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
 
     // ── Capture (main thread) ────────────────────────────────────────────────
 
@@ -429,7 +545,7 @@ public class InAppScreenRecorder : MonoBehaviour
         bool handedOff = false;
         try
         {
-            if (!_workerRunning || _encoder == null)
+            if (!_workerRunning || !EncoderReady())
                 return;
 
             if (request.hasError)
@@ -538,14 +654,18 @@ public class InAppScreenRecorder : MonoBehaviour
     }
 
     /// <summary>
-    /// Owns every JNI call into InAppFrameEncoder for the duration of a recording. Attaching to
-    /// the JVM is mandatory — AndroidJavaObject calls from an unattached thread crash the process.
-    /// The AndroidJavaObject itself holds a JNI global ref, so using it from here is valid; the
-    /// main thread only touches it before this thread starts and after it has exited.
+    /// Owns every native encoder call for the duration of a recording. On Android that means every
+    /// JNI call into InAppFrameEncoder, which requires the thread to be attached to the JVM (an
+    /// unattached thread would crash the process); iOS's DllImport calls have no such requirement.
+    /// The main thread only touches the encoder before this thread starts and after it has exited.
     /// </summary>
     private void EncodeThreadMain()
     {
+#if UNITY_ANDROID
+        // AndroidJavaObject calls from an unattached thread crash the process; iOS's DllImport calls
+        // have no such requirement, so the attach/detach is Android-only.
         AndroidJNI.AttachCurrentThread();
+#endif
         try
         {
             while (true)
@@ -568,14 +688,14 @@ public class InAppScreenRecorder : MonoBehaviour
         }
         finally
         {
+#if UNITY_ANDROID
             AndroidJNI.DetachCurrentThread();
+#endif
         }
     }
 
     private void ProcessWorkItem(WorkItem item)
     {
-        var encoder = _encoder;
-
         if (item.Rgba != null)
         {
             try
@@ -583,12 +703,12 @@ public class InAppScreenRecorder : MonoBehaviour
                 // _i420Scratch is nulled by ReleaseEncodeBuffers() once this thread is believed to
                 // have exited; if it hadn't quite, drop the frame rather than dereference null.
                 var scratch = _i420Scratch;
-                if (encoder == null || scratch == null)
+                if (!EncoderReady() || scratch == null)
                     return;
 
-                RgbaToI420(item.Rgba, scratch, _captureWidth, _captureHeight);
+                RgbaToI420(item.Rgba, scratch, _captureWidth, _captureHeight, _flipCaptureVertically);
 
-                // MediaCodec requires strictly increasing presentation timestamps. Readback
+                // Both encoders require strictly increasing presentation timestamps. Readback
                 // callbacks arrive in request order so this should never trigger, but a duplicate
                 // timestamp would poison the whole track, so clamp rather than trust.
                 long pts = item.Pts;
@@ -596,7 +716,7 @@ public class InAppScreenRecorder : MonoBehaviour
                     pts = _lastVideoPts + 1;
                 _lastVideoPts = pts;
 
-                if (encoder.Call<bool>("pushFrame", scratch, pts))
+                if (EncoderPushFrame(scratch, pts))
                 {
                     Interlocked.Increment(ref _framesEncoded);
                 }
@@ -606,7 +726,7 @@ public class InAppScreenRecorder : MonoBehaviour
                     if (fails <= 3 || fails % 30 == 0)
                     {
                         Debug.LogWarning($"[InAppScreenRecorder] pushFrame() returned false " +
-                            $"(pushFailCount={fails}) — check logcat \"InAppFrameEncoder\" tag.");
+                            $"(pushFailCount={fails}) — check the native \"InAppFrameEncoder\" logs.");
                     }
                 }
             }
@@ -618,11 +738,11 @@ public class InAppScreenRecorder : MonoBehaviour
             return;
         }
 
-        if (item.Pcm == null || item.Pcm.Length == 0 || encoder == null || _audioSampleRate <= 0)
+        if (item.Pcm == null || item.Pcm.Length == 0 || !EncoderReady() || _audioSampleRate <= 0)
             return;
 
         long audioPts = (long)((double)_audioSamplesWritten / _audioSampleRate * 1_000_000.0);
-        if (encoder.Call<bool>("pushAudioSamples", item.Pcm, audioPts))
+        if (EncoderPushAudio(item.Pcm, audioPts))
         {
             _audioSamplesWritten += item.Pcm.Length / Mathf.Max(1, _audioChannelCount);
         }
@@ -632,7 +752,7 @@ public class InAppScreenRecorder : MonoBehaviour
             if (fails <= 3 || fails % 30 == 0)
             {
                 Debug.LogWarning($"[InAppScreenRecorder] pushAudioSamples() returned false " +
-                    $"(audioPushFailCount={fails}) — check logcat \"InAppFrameEncoder\" tag.");
+                    $"(audioPushFailCount={fails}) — check the native \"InAppFrameEncoder\" logs.");
             }
         }
     }
@@ -700,18 +820,10 @@ public class InAppScreenRecorder : MonoBehaviour
             $"{_captureWidth}x{_captureHeight}, {framesThrottled} skipped for backpressure, " +
             $"{_readbackErrorCount} readback errors, {_pushFailCount} encoder rejections.");
 
-        string path = null;
-        if (_encoder != null)
-        {
-            path = _encoder.Call<string>("stop");
-            _encoder.Dispose();
-            _encoder = null;
-        }
-        else
-        {
-            Debug.LogError("[InAppScreenRecorder] FinishAndSave(): _encoder was already null — nothing to stop.");
-        }
-        yield return null; // let native stop()/muxer.release() settle before touching the file
+        string path = EncoderStop();
+        if (string.IsNullOrEmpty(path))
+            Debug.LogError("[InAppScreenRecorder] FinishAndSave(): encoder stop returned no path — nothing to save.");
+        yield return null; // let the native writer/muxer finalize the file before touching it
 
         bool fileExists = !string.IsNullOrEmpty(path) && File.Exists(path);
         long fileLength = fileExists ? new FileInfo(path).Length : 0;
@@ -726,6 +838,7 @@ public class InAppScreenRecorder : MonoBehaviour
             yield break;
         }
 
+#if UNITY_ANDROID
         LastSavedContentUri = null;
         try
         {
@@ -739,24 +852,34 @@ public class InAppScreenRecorder : MonoBehaviour
                 "the file still exists locally at " + path + ". Share-to-Instagram will fail until this is fixed. " +
                 "Exception: " + e);
         }
+#elif UNITY_IOS
+        _lastLocalPath = path;
+        // Copy into the Photos camera roll (async, fire-and-forget). The local temp file remains and
+        // is what the preview/share use — matching Android's "already saved by popup time" behavior.
+        IAFE_SaveToPhotos(path);
+#endif
 
-        // Local path is still what gets handed to RecordingPreviewController's VideoPlayer for the
-        // looping preview — the gallery copy above is a separate file purely for Share/Instagram.
+        // Local path is what gets handed to RecordingPreviewController's VideoPlayer for the looping
+        // preview — the gallery/Photos copy above is separate, purely for Save/Share.
         InvokePendingCallback(path);
     }
 
+#if UNITY_ANDROID
     private static AndroidJavaObject GetCurrentActivity()
     {
         using var unityPlayer = new AndroidJavaClass("com.unity3d.player.UnityPlayer");
         return unityPlayer.GetStatic<AndroidJavaObject>("currentActivity");
     }
+#endif
 
     private static int RoundToEven(int value) => value % 2 == 0 ? value : value + 1;
 
     /// <summary>
-    /// RGBA32 (from AsyncGPUReadback — rows are bottom-to-top, like all Unity texture readbacks)
-    /// converted into a caller-owned, tightly packed I420 buffer (full-res Y, then half-res U, then
-    /// half-res V), flipping to top-to-bottom row order so the resulting video isn't upside down.
+    /// RGBA32 (from AsyncGPUReadback) converted into a caller-owned, tightly packed I420 buffer
+    /// (full-res Y, then half-res U, then half-res V), emitting top-to-bottom row order so the video
+    /// isn't upside down. The readback's own row order is graphics-API dependent — bottom-to-top on
+    /// OpenGL/GLES, top-to-bottom on Metal/Vulkan/D3D — so <paramref name="flipVertically"/> (derived
+    /// from !SystemInfo.graphicsUVStartsAtTop by the caller) says whether to reverse rows here.
     /// BT.601 studio-swing (16-235) integer coefficients — the standard conversion MediaCodec
     /// expects. Runs on the encode thread; the destination buffer is reused across frames so this
     /// allocates nothing (the previous version allocated a fresh multi-megabyte array per frame,
@@ -774,7 +897,7 @@ public class InAppScreenRecorder : MonoBehaviour
     /// raw pixel bytes, never as signed magnitudes), so a plain unchecked (sbyte) cast of the 0-255
     /// value is correct.
     /// </summary>
-    private static void RgbaToI420(byte[] rgba, sbyte[] dst, int width, int height)
+    private static void RgbaToI420(byte[] rgba, sbyte[] dst, int width, int height, bool flipVertically)
     {
         int ySize = width * height;
         int uvWidth = width / 2;
@@ -784,7 +907,8 @@ public class InAppScreenRecorder : MonoBehaviour
 
         for (int row = 0; row < height; row++)
         {
-            int src = (height - 1 - row) * width * 4; // flip vertically
+            int srcRow = flipVertically ? (height - 1 - row) : row;
+            int src = srcRow * width * 4;
             int dstRow = row * width;
             for (int col = 0; col < width; col++)
             {
@@ -802,7 +926,8 @@ public class InAppScreenRecorder : MonoBehaviour
         // the old combined loop selected, so output is byte-identical to the previous version.
         for (int uvRow = 0; uvRow < uvHeight; uvRow++)
         {
-            int src = (height - 1 - uvRow * 2) * width * 4;
+            int srcPixRow = flipVertically ? (height - 1 - uvRow * 2) : (uvRow * 2);
+            int src = srcPixRow * width * 4;
             int dstRow = uvRow * uvWidth;
             for (int uvCol = 0; uvCol < uvWidth; uvCol++)
             {
@@ -822,7 +947,7 @@ public class InAppScreenRecorder : MonoBehaviour
 
     private void OnDestroy()
     {
-#if UNITY_ANDROID && !UNITY_EDITOR
+#if (UNITY_ANDROID || UNITY_IOS) && !UNITY_EDITOR
         IsRecording = false;
         if (_encodeThread != null)
         {
@@ -844,8 +969,12 @@ public class InAppScreenRecorder : MonoBehaviour
         }
         if (_audioTap != null)
             _audioTap.IsCapturing = false;
+#if UNITY_ANDROID
         _encoder?.Dispose();
         _encoder = null;
+#elif UNITY_IOS
+        if (_encoderConfigured) { IAFE_Stop(); _encoderConfigured = false; }
+#endif
 #endif
     }
 }

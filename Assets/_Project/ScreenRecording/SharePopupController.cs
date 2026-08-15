@@ -8,18 +8,15 @@ using UnityEngine.UI;
 /// Two actions: Save to Phone, Share to Instagram. Plus an optional Cancel/close that returns to
 /// the preview without doing anything.
 ///
-/// Save-to-Phone design note: on iOS, SmileSoft/ReplayKit only exposes a save-to-gallery flag at
-/// record-start (see ScreenRecordButtonController.Start(), which forces that flag on) — so by the
-/// time this popup is open, the clip is already in the camera roll, and Save is a confirmation
-/// beat rather than a separate write. On Android, InAppScreenRecorder copies the finished clip
-/// into the gallery itself right after StopRecording() completes (see
-/// InAppScreenRecorder.FinishAndSave()) — same "already saved by popup time" behavior, just
-/// implemented differently under the hood. Either way, OnSaveTapped() below doesn't need to know
-/// which platform it's on.
+/// Save-to-Phone design note: on both platforms InAppScreenRecorder copies the finished clip into
+/// the gallery/Photos itself right after StopRecording() completes (see
+/// InAppScreenRecorder.FinishAndSave() — MediaStore on Android, PHPhotoLibrary on iOS) — so by the
+/// time this popup is open, the clip is already saved, and Save is a confirmation beat rather than
+/// a separate write. Either way, OnSaveTapped() below doesn't need to know which platform it's on.
 ///
-/// Share-to-Instagram: iOS uses the plugin's generic ShareVideo() (OS share sheet) — confirmed
-/// working. Android uses InAppScreenRecorder.ShareLastRecording(), which hands the already-saved
-/// gallery content:// URI to the native OS share sheet.
+/// Share-to-Instagram: both platforms use InAppScreenRecorder.ShareLastRecording(), which hands the
+/// recording to the native OS share sheet (Android: the saved gallery content:// URI; iOS: the
+/// local file via UIActivityViewController).
 /// </summary>
 public class SharePopupController : MonoBehaviour
 {
@@ -137,25 +134,14 @@ public class SharePopupController : MonoBehaviour
             return;
         }
 
-        if (Application.platform == RuntimePlatform.Android)
+        // Both platforms share through InAppScreenRecorder now (Android: saved gallery content:// URI;
+        // iOS: the local file via UIActivityViewController).
+        if (InAppScreenRecorder.instance == null)
         {
-            if (InAppScreenRecorder.instance == null)
-            {
-                Debug.LogError("[SharePopupController] Cannot share — InAppScreenRecorder.instance is null.");
-                return;
-            }
-            InAppScreenRecorder.instance.ShareLastRecording("Share");
+            Debug.LogError("[SharePopupController] Cannot share — InAppScreenRecorder.instance is null.");
+            return;
         }
-        else
-        {
-            var ctrl = SmileSoftScreenRecordController.instance;
-            if (ctrl == null)
-            {
-                Debug.LogError("[SharePopupController] Cannot share — SmileSoftScreenRecordController.instance is null.");
-                return;
-            }
-            ctrl.ShareVideo(_filePath, "Check out my AR moment!", "Share");
-        }
+        InAppScreenRecorder.instance.ShareLastRecording("Share");
 
         Close();
         OnActionCompleted?.Invoke();

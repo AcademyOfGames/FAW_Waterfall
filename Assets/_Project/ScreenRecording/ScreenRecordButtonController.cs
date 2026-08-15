@@ -16,31 +16,26 @@ using UnityEngine.UI;
 /// <see cref="RecordingPreviewController"/> takes over from there (looping preview + Share button
 /// in this button's place). Call <see cref="ResetToIdle"/> to bring the button back.
 ///
-/// Requires a "Screen Recorder" GameObject with <see cref="SmileSoftScreenRecordController"/>
-/// already present in the scene (see Assets/Plugins/SunShine Native Screen Recorder/Prefab).
+/// Requires an <see cref="InAppScreenRecorder"/> component on a persistent GameObject in the scene
+/// — the single recording path for both Android and iOS.
 ///
-/// Android uses <see cref="InAppScreenRecorder"/> instead of SmileSoft/MediaProjection — that's
-/// what avoids the "Share your screen with FutureArtsWay?" system dialog. iOS still uses
-/// SmileSoftScreenRecordController/ReplayKit, since ReplayKit doesn't show that blocking consent
-/// dialog in the first place. Requires an InAppScreenRecorder component somewhere in the scene.
+/// Both platforms record via <see cref="InAppScreenRecorder"/>, which grabs Unity's OWN rendered
+/// frame (ScreenCapture.CaptureScreenshotIntoRenderTexture) and encodes it natively. Recording
+/// Unity's own frame (rather than the composited screen) is also what avoids the OS screen-capture
+/// consent dialogs — Android's "Share your screen with FutureArtsWay?" (MediaProjection) and iOS's
+/// ReplayKit alert.
 ///
-/// Native-overlay wrinkle (both platforms, for different reasons): whatever records the screen
-/// would otherwise capture this button/ring along with everything else. On Android,
-/// InAppScreenRecorder grabs Unity's own rendered frame, so anything Unity itself draws —
-/// including this button's Image/ringFillImage — would appear in the recorded video. On iOS,
-/// ReplayKit is a true system-level screen recorder that captures the full composited screen, so
-/// even a plain native view layered on top would still show up. To keep the button visible to the
-/// user but invisible to the recording on both platforms, this component disables its own
-/// Unity-rendered Image/ring and hands the actual visible button off to a native overlay,
-/// positioned to match this button's existing RectTransform:
-///  - Android: a genuine native Android View (NativeRecordButton.java) added alongside — never
-///    inside — Unity's own rendering surface, which Unity's capture has no way to see.
-///  - iOS: a UITextField with secureTextEntry = YES hosting our content in its protected internal
-///    canvas view (FawRecordButton.mm) — the same content-protection mechanism iOS uses to hide
-///    password fields from screenshots and screen recordings, including ReplayKit.
-/// Both mirror how the FAWCurrents_WebARMain project's recording HUD lives in a plain HTML
-/// element outside its captured &lt;canvas&gt;. All state-machine logic (Idle/Recording/Stopping)
-/// stays here in C#; the native views only draw pixels and forward taps back via UnitySendMessage.
+/// Native-overlay wrinkle (both platforms, same reason now): because InAppScreenRecorder captures
+/// Unity's own rendered frame, anything Unity itself draws — including this button's
+/// Image/ringFillImage — would appear in the recorded video. To keep the button visible to the user
+/// but invisible to the recording, this component disables its own Unity-rendered Image/ring and
+/// hands the visible button off to a native overlay layered ON TOP of Unity's render surface (which
+/// Unity's own frame capture has no way to see), positioned to match this button's RectTransform:
+///  - Android: a genuine native Android View (NativeRecordButton.java).
+///  - iOS: a native UIView on the key window (FawRecordButton.mm).
+/// Both mirror how the FAWCurrents_WebARMain project's recording HUD lives in a plain HTML element
+/// outside its captured &lt;canvas&gt;. All state-machine logic (Idle/Recording/Stopping) stays here
+/// in C#; the native views only draw pixels and forward taps back via UnitySendMessage.
 /// </summary>
 public class ScreenRecordButtonController : MonoBehaviour
 {
@@ -97,9 +92,6 @@ public class ScreenRecordButtonController : MonoBehaviour
         if (recordButton != null)
             recordButton.onClick.AddListener(OnButtonTapped);
 
-        SmileSoftScreenRecordController.OnIosRecordingProcessing += HandleIosProcessing;
-        SmileSoftScreenRecordController.OnIosRecordStartResult += HandleIosStartResult;
-
         // Keep the native overlay's visibility in lockstep with this GameObject's active state.
         // PersistentRecordingRoot hides the whole recording canvas on the main menu by
         // deactivating it — but the native button is a platform view outside Unity's hierarchy,
@@ -113,9 +105,6 @@ public class ScreenRecordButtonController : MonoBehaviour
         if (recordButton != null)
             recordButton.onClick.RemoveListener(OnButtonTapped);
 
-        SmileSoftScreenRecordController.OnIosRecordingProcessing -= HandleIosProcessing;
-        SmileSoftScreenRecordController.OnIosRecordStartResult -= HandleIosStartResult;
-
         NativeButton_Hide();
     }
 
@@ -126,40 +115,22 @@ public class ScreenRecordButtonController : MonoBehaviour
 
     private void Start()
     {
+        // InAppScreenRecorder is the single recording path for both platforms now (Unity-frame
+        // capture → native H.264 encoder). It saves the finished clip to the gallery/Photos itself
+        // right after StopRecording() finishes (see InAppScreenRecorder.FinishAndSave()), so the
+        // Save-to-Phone popup's "already saved by the time it opens" assumption still holds.
         if (InAppScreenRecorder.instance == null)
         {
-            Debug.LogWarning("[ScreenRecordButtonController] No InAppScreenRecorder in the scene — " +
-                "Android recording will fail. This is expected only if you haven't added that " +
-                "component yet (see InAppScreenRecorder.cs header comment).");
+            Debug.LogError("[ScreenRecordButtonController] No InAppScreenRecorder in the scene — " +
+                "recording will fail on both Android and iOS. Add an InAppScreenRecorder component " +
+                "to a persistent GameObject (see InAppScreenRecorder.cs header comment).");
         }
 
-        // Force gallery/Photos auto-save on for iOS, regardless of whatever is currently configured
-        // on the "Screen Recorder" prefab instance in the scene. The Save-to-Phone popup step
-        // assumes the clip is already in the camera roll by the time it's shown (see
-        // SharePopupController) — SmileSoft/ReplayKit only exposes a save-to-gallery flag at
-        // record-start, not on demand. (Android's InAppScreenRecorder saves to the gallery itself,
-        // right after StopRecording() finishes — see InAppScreenRecorder.FinishAndSave().)
-        var ctrl = SmileSoftScreenRecordController.instance;
-        if (ctrl == null)
-        {
-            Debug.LogError("[ScreenRecordButtonController] SmileSoftScreenRecordController.instance " +
-                "is null. Make sure the plugin's \"Screen Recorder\" prefab is in the scene.");
-            return;
-        }
-        ctrl.SetGalleryAddingCapabilities(true);
-        ctrl.SetIosSaveToPhotos(true);
-
-        bool isAndroid = ctrl.IsAndroidPlatform();
-        bool isIos = ctrl.IsIosPlatform();
-        if (!isAndroid && !isIos)
-        {
-            Debug.LogWarning("[ScreenRecordButtonController] Neither IsAndroidPlatform() nor " +
-                "IsIosPlatform() is true — this is almost always because you're running in the " +
-                "Unity Editor / Play Mode. SmileSoftScreenRecordController.StartRecording()/" +
-                "StopRecording() are silent no-ops here (no ReplayKit / MediaProjection in the " +
-                "Editor process), so the recording flow will not run past the ring-fill animation. " +
-                "Build to a real Android or iOS device to test recording end-to-end.");
-        }
+#if (!UNITY_ANDROID && !UNITY_IOS) || UNITY_EDITOR
+        Debug.LogWarning("[ScreenRecordButtonController] Recording only runs on Android/iOS device " +
+            "builds — InAppScreenRecorder.StartRecording()/StopRecording() are no-ops in the Editor, " +
+            "so the flow won't run past the ring-fill animation. Build to a device to test end-to-end.");
+#endif
 
         SetupNativeOverlayButton();
         SetIdleVisuals();
@@ -193,45 +164,15 @@ public class ScreenRecordButtonController : MonoBehaviour
 
     private void BeginRecording()
     {
-        if (Application.platform == RuntimePlatform.Android)
+        // Both platforms record via InAppScreenRecorder (Unity-frame capture). It captures the
+        // app's own mixed audio via AudioCaptureTap (no microphone, no mic-permission prompt).
+        if (InAppScreenRecorder.instance == null)
         {
-            if (InAppScreenRecorder.instance == null)
-            {
-                Debug.LogError("[ScreenRecordButtonController] Cannot start recording — " +
-                    "InAppScreenRecorder.instance is null. Add an InAppScreenRecorder component to the scene.");
-                return;
-            }
-            InAppScreenRecorder.instance.StartRecording();
+            Debug.LogError("[ScreenRecordButtonController] Cannot start recording — " +
+                "InAppScreenRecorder.instance is null. Add an InAppScreenRecorder component to the scene.");
+            return;
         }
-        else
-        {
-            var ctrl = SmileSoftScreenRecordController.instance;
-            if (ctrl == null)
-            {
-                Debug.LogError("[ScreenRecordButtonController] Cannot start recording — " +
-                    "SmileSoftScreenRecordController.instance is null.");
-                return;
-            }
-
-            if (ctrl.IsIosPlatform() && !ctrl.IsRecordingAvailable())
-            {
-                Debug.LogWarning("[ScreenRecordButtonController] Recording unavailable on this device.");
-                return;
-            }
-
-            string videoName = "Record_" + DateTime.Now.ToString("yyyy_MM_dd_HH_mm_ss");
-            ctrl.SetVideoName(videoName);
-
-            // Match what Android's InAppScreenRecorder records: the app's own audio, no
-            // microphone. SystemAudio keeps the experience's sound in the clip without triggering
-            // the iOS mic-permission prompt or picking up room noise. Set here (rather than in
-            // Start()) because the plugin's EasyScreenRecordInitializer also writes this setting
-            // from its own Start() — the value is only read at record-start, so this is the one
-            // spot where we always win. Switch to MicAudio if narration over recordings is wanted.
-            ctrl.SetAudioRecordingMode(SmileSoftScreenRecordController.AudioRecordingMode.SystemAudio);
-
-            ctrl.StartRecording();
-        }
+        InAppScreenRecorder.instance.StartRecording();
 
         _state = State.Recording;
         SetRecordingVisuals();
@@ -251,31 +192,22 @@ public class ScreenRecordButtonController : MonoBehaviour
 
         _state = State.Stopping;
 
-        if (Application.platform == RuntimePlatform.Android)
-        {
-            if (InAppScreenRecorder.instance == null)
-            {
-                Debug.LogError("[ScreenRecordButtonController] Cannot stop recording — " +
-                    "InAppScreenRecorder.instance is null.");
-                _state = State.Idle;
-                SetIdleVisuals();
-                return;
-            }
-            InAppScreenRecorder.instance.StopRecording(HandleRecordingStopped);
-            return;
-        }
+        // The file isn't ready instantly — the encoder has to drain its backlog and finalize the
+        // mp4. Show the processing spinner now; HandleRecordingStopped hides it when the path lands.
+        if (processingIndicator != null)
+            processingIndicator.SetActive(true);
 
-        var ctrl = SmileSoftScreenRecordController.instance;
-        if (ctrl == null)
+        if (InAppScreenRecorder.instance == null)
         {
             Debug.LogError("[ScreenRecordButtonController] Cannot stop recording — " +
-                "SmileSoftScreenRecordController.instance is null.");
+                "InAppScreenRecorder.instance is null.");
             _state = State.Idle;
+            if (processingIndicator != null)
+                processingIndicator.SetActive(false);
             SetIdleVisuals();
             return;
         }
-
-        ctrl.StopRecording(HandleRecordingStopped);
+        InAppScreenRecorder.instance.StopRecording(HandleRecordingStopped);
     }
 
     private void HandleRecordingStopped(string path)
@@ -310,44 +242,6 @@ public class ScreenRecordButtonController : MonoBehaviour
         gameObject.SetActive(false);
         _state = State.Idle;
         OnRecordingFinished?.Invoke(path);
-    }
-
-    private void HandleIosProcessing()
-    {
-        if (processingIndicator != null)
-            processingIndicator.SetActive(true);
-    }
-
-    /// <summary>
-    /// iOS only — result of the asynchronous ReplayKit start (see
-    /// <see cref="SmileSoftScreenRecordController.OnIosRecordStartResult"/>). BeginRecording()
-    /// flipped the UI to the recording state optimistically at tap time; this either syncs the
-    /// ring timer to the moment capture actually began (the first-ever start sits behind a system
-    /// consent alert, which can add seconds), or unwinds back to idle if the start failed —
-    /// without this, a denied consent alert left the button stuck showing a recording that
-    /// wasn't happening.
-    /// </summary>
-    private void HandleIosStartResult(bool success)
-    {
-        if (_state != State.Recording)
-            return;
-
-        if (_fillRoutine != null)
-        {
-            StopCoroutine(_fillRoutine);
-            _fillRoutine = null;
-        }
-
-        if (success)
-        {
-            _fillRoutine = StartCoroutine(FillRoutine()); // restart the cap timer from the real start
-            return;
-        }
-
-        Debug.LogWarning("[ScreenRecordButtonController] iOS recording failed to start (consent " +
-            "denied or ReplayKit unavailable) — resetting the button to idle.");
-        _state = State.Idle;
-        SetIdleVisuals();
     }
 
     /// <summary>Call after Discard, or after the share popup finishes, to show the button again.</summary>

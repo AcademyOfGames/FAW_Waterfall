@@ -3,28 +3,16 @@
 // Native iOS overlay for the in-app screen-record button and its progress ring — the iOS
 // counterpart to Assets/Plugins/Android/.../inapprecorder/NativeRecordButton.java.
 //
-// WHY THIS EXISTS AND WHY IT'S DIFFERENT FROM THE ANDROID VERSION:
-// On Android, InAppScreenRecorder grabs frames via ScreenCapture.CaptureScreenshotIntoRenderTexture,
-// which only ever reads back pixels Unity itself rendered — a native Android View layered on top
-// is invisible to it, since it never touches Unity's own render output. On iOS, recording goes
-// through ReplayKit (see SmileSoftScreenRecordController/ReplayKitBridge.cs), which is a genuine
-// system-level screen recorder: it captures the final composited output of everything on screen,
-// including any plain native UIView layered on top of Unity's Metal view. So the Android trick
-// (a separate rendering surface the OS never feeds into the capture) has no iOS equivalent for a
-// PLAIN view.
+// WHY A NATIVE OVERLAY (same reason as Android): recording goes through InAppScreenRecorder, which
+// grabs frames via ScreenCapture.CaptureScreenshotIntoRenderTexture — i.e. it reads back only the
+// pixels Unity itself rendered. A native UIView layered on TOP of Unity's Metal view is never part
+// of Unity's own render output, so it can't appear in the recording. That's exactly what we want:
+// the button stays visible to the user on the live display but is absent from the captured video.
 //
-// Instead, this uses the same content-protection mechanism iOS applies to password fields: a
-// UITextField with secureTextEntry = YES gets a specially protected backing layer that the window
-// server excludes from screenshots AND screen recordings (including ReplayKit), while still
-// rendering normally on the live display. By inserting our own button/ring content INTO that
-// field's internal (undocumented) content view instead of showing secure text, our content
-// inherits that same protection.
-//
-// CAVEAT: this relies on UITextField's private internal view hierarchy, which Apple does not
-// document or guarantee — it has worked across many iOS versions in many shipping apps, but it
-// could break in a future iOS release without warning. If the button ever fails to hide from a
-// recording, or fails to appear at all, that's the first thing to re-verify on the current iOS
-// version. This file has not been compiled/tested on a device — verify in Xcode before shipping.
+// (This replaced an earlier ReplayKit-based approach. ReplayKit was a whole-screen system capture
+// that DID include native overlays, which forced a fragile secureTextEntry content-protection hack
+// to hide the button. Recording Unity's own frame instead makes that hack unnecessary — the button
+// is simply a plain UIView now, just like the Android side.)
 
 #import <UIKit/UIKit.h>
 
@@ -136,10 +124,9 @@ static NSString *FawNSStringFromCString(const char *cstr) {
 
 @end
 
-// ── Overlay controller: secure-field host + tap forwarding ─────────────────
+// ── Overlay controller: draws the button and forwards taps ─────────────────
 
 @interface FawRecordButtonOverlay : NSObject
-@property(nonatomic, strong) UITextField *secureField;
 @property(nonatomic, strong) FawRingButtonView *buttonView;
 @property(nonatomic, copy) NSString *unityGameObjectName;
 - (void)createWithGameObjectName:(NSString *)name
@@ -195,35 +182,16 @@ static UIWindow *FawGetKeyWindow(void) {
     CGRect frame = CGRectMake(x * pixelToPoint, y * pixelToPoint,
                               width * pixelToPoint, height * pixelToPoint);
 
-    self.secureField = [[UITextField alloc] initWithFrame:frame];
-    self.secureField.secureTextEntry = YES;
-    self.secureField.borderStyle = UITextBorderStyleNone;
-    self.secureField.backgroundColor = [UIColor clearColor];
-    self.secureField.userInteractionEnabled = YES;
-    self.secureField.enabled = NO; // no keyboard/editing — we only want its protected canvas layer
-
-    [keyWindow addSubview:self.secureField];
-
-    // Forces iOS to fully materialize the text field's internal protected content view before we
-    // go looking for it below. Not strictly documented behavior, but reflects the common pattern
-    // for this technique.
-    [self.secureField becomeFirstResponder];
-    [self.secureField resignFirstResponder];
-
-    UIView *canvasView = self.secureField.subviews.lastObject;
-    if (canvasView == nil) {
-        NSLog(@"[FawRecordButton] Could not find the secure text field's internal content view on "
-              @"this iOS version — falling back to an UNPROTECTED overlay (it WILL show up in "
-              @"screen recordings). Please flag this so the technique can be revisited.");
-        canvasView = self.secureField;
-    }
-    canvasView.clipsToBounds = NO;
-
-    self.buttonView = [[FawRingButtonView alloc] initWithFrame:CGRectMake(0, 0, frame.size.width, frame.size.height)];
+    // A plain interactive overlay on top of Unity's view. InAppScreenRecorder captures only Unity's
+    // own rendered frame, so this native view is never in the recording — no content-protection
+    // trickery needed. It draws the button/ring and forwards taps back to Unity.
+    self.buttonView = [[FawRingButtonView alloc] initWithFrame:frame];
+    self.buttonView.backgroundColor = [UIColor clearColor];
     self.buttonView.userInteractionEnabled = YES;
     UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc] initWithTarget:self action:@selector(handleTap)];
     [self.buttonView addGestureRecognizer:tap];
-    [canvasView addSubview:self.buttonView];
+    [keyWindow addSubview:self.buttonView];
+    [keyWindow bringSubviewToFront:self.buttonView];
 }
 
 - (void)handleTap {
@@ -233,11 +201,12 @@ static UIWindow *FawGetKeyWindow(void) {
 }
 
 - (void)show {
-    self.secureField.hidden = NO;
+    self.buttonView.hidden = NO;
 }
 
 - (void)hide {
-    self.secureField.hidden = YES;
+    // A hidden view also drops out of hit-testing, so this is inert on the main menu.
+    self.buttonView.hidden = YES;
 }
 
 - (void)setRecording:(BOOL)recording {
@@ -250,9 +219,7 @@ static UIWindow *FawGetKeyWindow(void) {
 
 - (void)destroy {
     [self.buttonView removeFromSuperview];
-    [self.secureField removeFromSuperview];
     self.buttonView = nil;
-    self.secureField = nil;
 }
 
 @end
