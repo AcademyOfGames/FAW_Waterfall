@@ -11,7 +11,7 @@ MonoBehaviour:
   m_EditorHideFlags: 0
   m_Script: {fileID: 11500000, guid: d989861ef825b2e4fb3cbcd03f532909, type: 3}
   m_Name: ion.cesium.com
-  m_EditorClassIdentifier: 
+  m_EditorClassIdentifier: CesiumForUnity::CesiumForUnity.CesiumIonServer
   serverUrl: https://ion.cesium.com
   apiUrl: https://api.cesium.com
   oauth2ApplicationID: 381

@@ -35,12 +35,13 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     [SerializeField] private Color nearestExperienceNameColor = new Color32(0x2E, 0x8B, 0xFF, 0xFF);
 
     [Header("Debug / testing — force geofence")]
-    [Tooltip("Pretend GPS is at this experience's lat/lon. If more than one is checked, the first in list order below wins (Benaroya → Alina → Divine).")]
+    [Tooltip("Pretend GPS is at this experience's lat/lon. If more than one is checked, the first in list order below wins (Benaroya → Alina → Divine → Water Lines).")]
     [SerializeField] private bool forceBenaroyaGeofence;
     [FormerlySerializedAs("forceAtAlinaGeofence")]
     [SerializeField] private bool forceAlinaGeofence;
     [FormerlySerializedAs("forceSampleSceneGeofence")]
     [SerializeField] private bool forceDivineSceneGeofence;
+    [SerializeField] private bool forceWaterLinesGeofence;
     [Tooltip("When runtime HUD is built, add on-screen toggles for force-geofence overrides.")]
     [SerializeField] private bool buildRuntimeForceGeofenceToggles = true;
     [Header("Screen record (SunShine example demo)")]
@@ -609,7 +610,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     }
 
     private bool AnyForceGeofenceEnabled =>
-        forceBenaroyaGeofence || forceAlinaGeofence || forceDivineSceneGeofence;
+        forceBenaroyaGeofence || forceAlinaGeofence || forceDivineSceneGeofence || forceWaterLinesGeofence;
 
     private bool TryGetForcedGeofence(out ExperienceGeofenceDefinition definition)
     {
@@ -641,6 +642,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
                 "benaroyaScene" => forceBenaroyaGeofence,
                 "AlinaScene" => forceAlinaGeofence,
                 "DivineScene" => forceDivineSceneGeofence,
+                "WaterLines" => forceWaterLinesGeofence,
                 _ => false
             };
         }
@@ -671,6 +673,10 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
                 case "DivineScene":
                     if (forceDivineSceneGeofence == value) return false;
                     forceDivineSceneGeofence = value;
+                    return true;
+                case "WaterLines":
+                    if (forceWaterLinesGeofence == value) return false;
+                    forceWaterLinesGeofence = value;
                     return true;
             }
         }
