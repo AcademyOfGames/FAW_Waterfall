@@ -1630,7 +1630,7 @@
     "m_ObjectId": "40f5ce22c3b64586afe8792aef5f0c84",
     "m_Title": "col",
     "m_Position": {
-        "x": -79.00006103515625,
+        "x": -79.0,
         "y": 598.0
     }
 }
@@ -2388,7 +2388,7 @@
         "m_Id": "60f3116dfc3e4b628faa02a12b1cc020"
     },
     "m_AllowMaterialOverride": false,
-    "m_SurfaceType": 1,
+    "m_SurfaceType": 0,
     "m_ZTestMode": 4,
     "m_ZWriteControl": 0,
     "m_AlphaMode": 0,
@@ -3933,7 +3933,7 @@
     "m_ObjectId": "bcc038362c12447ea337b02df2e7fb9c",
     "m_Title": "Color",
     "m_Position": {
-        "x": -265.0000305175781,
+        "x": -265.0,
         "y": -272.0
     }
 }
