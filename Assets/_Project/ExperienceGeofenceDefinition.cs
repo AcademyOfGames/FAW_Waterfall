@@ -31,6 +31,14 @@ public struct ExperienceGeofenceDefinition
             SceneName = "DivineScene",
             Latitude = 47.6111,
             Longitude = -122.339
+        },
+        new ExperienceGeofenceDefinition
+        {
+            ExperienceName = "Waterlines",
+            SceneName = "devScene",
+            // Midpoint of the two Geospatial Creator anchors (King Street Station); loads devScene.
+            Latitude = 47.5987,
+            Longitude = -122.33
         }
     };
 
@@ -65,6 +73,7 @@ public struct ExperienceGeofenceDefinition
             case "benaroya": sceneName = "benaroyaScene"; return true;
             case "alina": sceneName = "AlinaScene"; return true;
             case "divine": sceneName = "DivineScene"; return true;
+            case "waterlines": sceneName = "devScene"; return true;
             case "samplescene": sceneName = "DivineScene"; return true;
             case "dev": sceneName = "devScene"; return true;
             default:
