@@ -60,7 +60,7 @@ Material:
     - Vector1_F38B44AA: 0.81
     - _QueueControl: 0
     - _QueueOffset: 2
-    - _WaterFill: 0.4
+    - _WaterFill: 0.44
     - _WaveFrequency: 10
     - _WaveScale: 0.001
     - _WaveSpeed: 0

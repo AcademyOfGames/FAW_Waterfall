@@ -747,7 +747,7 @@ PrefabInstance:
     - target: {fileID: -8679921383154817045, guid: b9f61f01fc7b03149acdf9c12b54b518,
         type: 3}
       propertyPath: m_LocalPosition.z
-      value: -0.028
+      value: -0.034
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: b9f61f01fc7b03149acdf9c12b54b518,
         type: 3}
@@ -808,7 +808,11 @@ PrefabInstance:
     m_RemovedComponents: []
     m_RemovedGameObjects: []
     m_AddedGameObjects: []
-    m_AddedComponents: []
+    m_AddedComponents:
+    - targetCorrespondingSourceObject: {fileID: 919132149155446097, guid: b9f61f01fc7b03149acdf9c12b54b518,
+        type: 3}
+      insertIndex: -1
+      addedObject: {fileID: 1629246369}
   m_SourcePrefab: {fileID: 100100000, guid: b9f61f01fc7b03149acdf9c12b54b518, type: 3}
 --- !u!4 &1629246367 stripped
 Transform:
@@ -816,6 +820,33 @@ Transform:
     type: 3}
   m_PrefabInstance: {fileID: 1629246366}
   m_PrefabAsset: {fileID: 0}
+--- !u!1 &1629246368 stripped
+GameObject:
+  m_CorrespondingSourceObject: {fileID: 919132149155446097, guid: b9f61f01fc7b03149acdf9c12b54b518,
+    type: 3}
+  m_PrefabInstance: {fileID: 1629246366}
+  m_PrefabAsset: {fileID: 0}
+--- !u!95 &1629246369
+Animator:
+  serializedVersion: 5
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 1629246368}
+  m_Enabled: 1
+  m_Avatar: {fileID: 0}
+  m_Controller: {fileID: 9100000, guid: 8af37ca2d4586054f8434aa6e3d91856, type: 2}
+  m_CullingMode: 0
+  m_UpdateMode: 0
+  m_ApplyRootMotion: 0
+  m_LinearVelocityBlending: 0
+  m_StabilizeFeet: 0
+  m_WarningMessage: 
+  m_HasTransformHierarchy: 1
+  m_AllowConstantClipSamplingOptimization: 1
+  m_KeepAnimatorStateOnDisable: 0
+  m_WriteDefaultValuesOnDisable: 0
 --- !u!1 &1672730731
 GameObject:
   m_ObjectHideFlags: 0
@@ -2258,7 +2289,7 @@ PrefabInstance:
     - target: {fileID: 2302122952063317081, guid: e3df3843631c22e4c99e9617b7dbdc67,
         type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.03
+      value: -0.119
       objectReference: {fileID: 0}
     - target: {fileID: 2362565870174543570, guid: e3df3843631c22e4c99e9617b7dbdc67,
         type: 3}
@@ -2610,6 +2641,16 @@ PrefabInstance:
       propertyPath: audioDelaySeconds
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3162460018032406401, guid: e3df3843631c22e4c99e9617b7dbdc67,
+        type: 3}
+      propertyPath: alsoPlay.Array.size
+      value: 1
+      objectReference: {fileID: 0}
+    - target: {fileID: 3162460018032406401, guid: e3df3843631c22e4c99e9617b7dbdc67,
+        type: 3}
+      propertyPath: alsoPlay.Array.data[0]
+      value: 
+      objectReference: {fileID: 1629246369}
     - target: {fileID: 3174765770740238821, guid: e3df3843631c22e4c99e9617b7dbdc67,
         type: 3}
       propertyPath: m_LocalEulerAnglesHint.x

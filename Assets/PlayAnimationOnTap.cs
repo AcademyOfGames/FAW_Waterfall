@@ -20,6 +20,16 @@ public class PlayAnimationOnTap : MonoBehaviour
     [Tooltip("Also replay the animation when the screen is tapped.")]
     [SerializeField] private bool playOnTap = false;
 
+    [Header("Linked Animations")]
+    [Tooltip("Other Animators to start at the same moment as this one (e.g. waterlinesSandWater). Each is held on the " +
+             "first frame of its default state until then.")]
+    [SerializeField] private Animator[] alsoPlay;
+    [Tooltip("State to play on each linked Animator, matched by position in the list above. Leave an entry empty (or " +
+             "the list short) to auto-pick: the state named after one of the controller's clips, else the default state.")]
+    [SerializeField] private string[] alsoPlayStates;
+
+    private float[] alsoPlaySpeeds;
+
     [Header("Audio")]
     [Tooltip("AudioSource to fade in when the animation plays. Found on this object if left empty.")]
     [SerializeField] private AudioSource audioSource;
@@ -47,6 +57,56 @@ public class PlayAnimationOnTap : MonoBehaviour
             audioSource.playOnAwake = false;
             audioSource.volume = 0f;
         }
+
+        // Freeze the linked animators on their first frame until the water starts.
+        alsoPlaySpeeds = new float[alsoPlay != null ? alsoPlay.Length : 0];
+        for (int i = 0; i < alsoPlaySpeeds.Length; i++)
+        {
+            if (alsoPlay[i] == null) continue;
+            alsoPlaySpeeds[i] = Mathf.Approximately(alsoPlay[i].speed, 0f) ? 1f : alsoPlay[i].speed;
+            alsoPlay[i].speed = 0f;
+        }
+    }
+
+    private void PlayLinked()
+    {
+        if (alsoPlay == null || alsoPlaySpeeds == null) return;
+        for (int i = 0; i < alsoPlay.Length && i < alsoPlaySpeeds.Length; i++)
+        {
+            var linked = alsoPlay[i];
+            if (linked == null || !linked.isActiveAndEnabled) continue;
+            linked.speed = alsoPlaySpeeds[i];
+            string requested = alsoPlayStates != null && i < alsoPlayStates.Length ? alsoPlayStates[i] : null;
+            linked.Play(ResolveLinkedState(linked, requested), 0, 0f);
+        }
+    }
+
+    /// <summary>
+    /// Picks the state to start on a linked Animator: the requested name if it exists, otherwise a state
+    /// named after one of the controller's clips (so it still works when that state isn't the default),
+    /// otherwise whatever state the Animator is currently sitting in.
+    /// </summary>
+    private int ResolveLinkedState(Animator linked, string requested)
+    {
+        if (!string.IsNullOrEmpty(requested))
+        {
+            int hash = Animator.StringToHash(requested);
+            if (linked.HasState(0, hash)) return hash;
+            Debug.LogWarning($"PlayAnimationOnTap: '{linked.name}' has no state named '{requested}'; auto-picking instead.", this);
+        }
+
+        var controller = linked.runtimeAnimatorController;
+        if (controller != null)
+        {
+            foreach (var clip in controller.animationClips)
+            {
+                if (clip == null) continue;
+                int hash = Animator.StringToHash(clip.name);
+                if (linked.HasState(0, hash)) return hash;
+            }
+        }
+
+        return linked.GetCurrentAnimatorStateInfo(0).fullPathHash;
     }
 
     private void Start()
@@ -64,6 +124,7 @@ public class PlayAnimationOnTap : MonoBehaviour
         {
             animator.Play(stateName, layer, 0f);
         }
+        PlayLinked();
         StartAudioFade();
     }
 
@@ -119,6 +180,7 @@ public class PlayAnimationOnTap : MonoBehaviour
         {
             animator.Play(stateName, layer);
         }
+        PlayLinked();
         StartAudioFade();
     }
 
