@@ -136,7 +136,7 @@ Material:
     - _ZWrite: 1
     - _puddleOffset: 0.22
     - _puddleSize: 0.53
-    - _waterFill: 0.37
+    - _waterFill: 5
     - _waterSpeed: -0.1
     m_Colors:
     - _BaseColor: {r: 0.2264151, g: 0.2264151, b: 0.2264151, a: 1}

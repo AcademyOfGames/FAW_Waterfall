@@ -212,7 +212,7 @@ AnimatorStateMachine:
     m_Position: {x: -10, y: 120, z: 0}
   - serializedVersion: 1
     m_State: {fileID: -8957435666822200987}
-    m_Position: {x: 549.56116, y: 205.09268, z: 0}
+    m_Position: {x: 550, y: 210, z: 0}
   - serializedVersion: 1
     m_State: {fileID: -4890029709432157190}
     m_Position: {x: 500, y: 290, z: 0}
@@ -347,7 +347,7 @@ AnimatorState:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_Name: fly
-  m_Speed: 1
+  m_Speed: 0.52
   m_CycleOffset: 0
   m_Transitions:
   - {fileID: -7666845741107206447}

@@ -1,3 +1,4 @@
+using System.Collections;
 using UnityEngine;
 using UnityEngine.EventSystems;
 using UnityEngine.InputSystem;
@@ -19,11 +20,32 @@ public class PlayAnimationOnTap : MonoBehaviour
     [Tooltip("Also replay the animation when the screen is tapped.")]
     [SerializeField] private bool playOnTap = false;
 
+    [Header("Audio")]
+    [Tooltip("AudioSource to fade in when the animation plays. Found on this object if left empty.")]
+    [SerializeField] private AudioSource audioSource;
+    [Tooltip("Volume the audio fades up to when the animation starts.")]
+    [Range(0f, 1f)] [SerializeField] private float maxVolume = 1f;
+    [Tooltip("Seconds to fade from silent to Max Volume once the animation starts.")]
+    [SerializeField] private float fadeInSeconds = 2f;
+    [Tooltip("Seconds to wait after the animation starts before the fade begins.")]
+    [SerializeField] private float audioDelaySeconds = 0f;
+
+    private Coroutine fadeRoutine;
+
     private void Awake()
     {
         if (animator == null)
         {
             animator = GetComponent<Animator>();
+        }
+        if (audioSource == null)
+        {
+            audioSource = GetComponent<AudioSource>();
+        }
+        if (audioSource != null)
+        {
+            audioSource.playOnAwake = false;
+            audioSource.volume = 0f;
         }
     }
 
@@ -42,6 +64,33 @@ public class PlayAnimationOnTap : MonoBehaviour
         {
             animator.Play(stateName, layer, 0f);
         }
+        StartAudioFade();
+    }
+
+    /// <summary>Fades the audio from silent up to Max Volume, starting it if it isn't already playing.</summary>
+    public void StartAudioFade()
+    {
+        if (audioSource == null) return;
+        if (fadeRoutine != null) StopCoroutine(fadeRoutine);
+        fadeRoutine = StartCoroutine(FadeIn());
+    }
+
+    private IEnumerator FadeIn()
+    {
+        audioSource.volume = 0f;
+        if (audioDelaySeconds > 0f)
+            yield return new WaitForSeconds(audioDelaySeconds);
+
+        if (!audioSource.isPlaying) audioSource.Play();
+
+        float duration = Mathf.Max(fadeInSeconds, 0f);
+        for (float t = 0f; t < duration; t += Time.deltaTime)
+        {
+            audioSource.volume = Mathf.Lerp(0f, maxVolume, t / duration);
+            yield return null;
+        }
+        audioSource.volume = maxVolume;
+        fadeRoutine = null;
     }
 
     /// <summary>Stops this from playing itself at scene start, so another script can trigger it instead.</summary>
@@ -70,6 +119,7 @@ public class PlayAnimationOnTap : MonoBehaviour
         {
             animator.Play(stateName, layer);
         }
+        StartAudioFade();
     }
 
     private static bool WasTappedThisFrame(out int pointerId)

@@ -49,7 +49,8 @@ public class HeronFlight : MonoBehaviour
     [Header("On Landing")]
     [Tooltip("Water animation to start as the heron comes in to land. Found automatically if left empty.")]
     public PlayAnimationOnTap waterAnimation;
-    [Tooltip("Seconds before touchdown to start the water animation. 0 = start exactly on landing.")]
+    [Tooltip("When the water animation starts, relative to the heron landing. Positive = seconds BEFORE touchdown " +
+             "(during the approach). 0 = when the landing clip finishes. Negative = seconds AFTER the landing clip finishes.")]
     public float waterLeadTime = 3f;
     [Tooltip("Anything else to trigger on touchdown.")]
     public UnityEngine.Events.UnityEvent onLanded;
@@ -63,6 +64,8 @@ public class HeronFlight : MonoBehaviour
     public float idleDuration = 3f;
     [Tooltip("How many times to play the eat animation before flying away. 0 = never fly away.")]
     public int eatCycles = 2;
+    [Tooltip("Log the idle countdown (time left before the next eat) every frame while the heron is idling on the rocks.")]
+    public bool logIdleCountdown = true;
 
     [Header("Fly Away")]
     [Tooltip("Where the heron leaves to. Falls back to a scene object named 'HeronFlyAwayTarget'.")]
@@ -76,6 +79,10 @@ public class HeronFlight : MonoBehaviour
     public int takeoffPathStartFrame = 22;
     [Tooltip("Seconds over which the path takes over from the clip's root motion once it starts.")]
     public float takeoffPathBlendSeconds = 1f;
+    [Tooltip("Steepest nose-up angle (degrees) the heron may pitch to while the takeoff clip is driving it. Stops it " +
+             "pointing straight up on the hop, since the clip's root motion is mostly vertical. Relaxes to unlimited " +
+             "over the path blend.")]
+    [Range(0f, 90f)] public float takeoffMaxPitch = 20f;
     [Tooltip("Multiplier on the takeoff clip's root motion, in case the clip moves too little or too far for the scene.")]
     public float takeoffRootMotionScale = 1f;
     [Tooltip("How far it carries on straight ahead before curving toward the target (fraction of the distance).")]
@@ -84,6 +91,10 @@ public class HeronFlight : MonoBehaviour
     public float flyAwayClimb = 1.5f;
     [Tooltip("How directly it comes into the target at the end (fraction of the distance).")]
     [Range(0f, 1f)] public float flyAwayApproachStretch = 0.3f;
+    [Tooltip("Sideways bend in the first half of the exit, in metres. Positive = right of the line to the target, negative = left.")]
+    public float flyAwaySideCurve = 0f;
+    [Tooltip("Sideways bend in the second half of the exit, in metres. Same sign as above; use the opposite sign for an S-curve.")]
+    public float flyAwaySideCurveEnd = 0f;
     [Tooltip("Switch the heron off once it reaches the target.")]
     public bool deactivateOnFlyAway = true;
 
@@ -143,8 +154,11 @@ public class HeronFlight : MonoBehaviour
         animator.Play(flyState, 0, 0f);
 
         yield return Fly();
+        Phase("Fly finished, starting Land");
         yield return Land();
+        Phase("Land finished, starting IdleThenEat");
         yield return IdleThenEat();
+        Phase($"IdleThenEat finished (eatCycles={eatCycles}, flyAwayTarget={(heronFlyAwayTarget != null ? heronFlyAwayTarget.name : "null")})");
 
         if (eatCycles > 0 && heronFlyAwayTarget != null)
             yield return FlyAway();
@@ -158,6 +172,26 @@ public class HeronFlight : MonoBehaviour
     bool bankTakeoffRootMotion;
     Vector3 bankedRootMotion;
 
+    void Phase(string message)
+    {
+        if (logIdleCountdown) Debug.Log($"HeronFlight [{Time.time:F2}s] {message}", this);
+    }
+
+    // >= 0 only while IdleThenEat is counting down to the next eat.
+    float idleTimeLeft = -1f;
+    int idleCycle;
+
+    void Update()
+    {
+        if (!logIdleCountdown || idleTimeLeft < 0f || animator == null) return;
+        var state = animator.GetCurrentAnimatorStateInfo(0);
+        string stateName = state.IsName(idleState) ? idleState
+            : state.IsName(landingState) ? landingState
+            : state.IsName(eatState) ? eatState : "other";
+        Debug.Log($"HeronFlight idle {idleCycle}/{Mathf.Max(eatCycles, 1)}: {idleTimeLeft:F2}s left before eat " +
+                  $"(animator state={stateName}, inTransition={animator.IsInTransition(0)})", this);
+    }
+
     void OnAnimatorMove()
     {
         if (bankTakeoffRootMotion)
@@ -165,11 +199,29 @@ public class HeronFlight : MonoBehaviour
     }
 
     // Turns the body toward the direction it actually moved this frame.
-    void FaceMovement(Vector3 previous, Vector3 current)
+    void FaceMovement(Vector3 previous, Vector3 current, float maxPitchDegrees = 90f)
     {
         Vector3 velocity = current - previous;
         if (velocity.sqrMagnitude < 1e-8f) return;
-        Quaternion look = Quaternion.LookRotation(velocity.normalized, Vector3.up);
+        Vector3 dir = velocity.normalized;
+
+        if (maxPitchDegrees < 90f)
+        {
+            // Clamp how far above/below horizontal the facing may tilt. If the movement is nearly
+            // vertical there's no useful heading in it, so keep the current one.
+            Vector3 flat = new Vector3(dir.x, 0f, dir.z);
+            if (flat.sqrMagnitude < 1e-6f)
+            {
+                flat = transform.forward;
+                flat.y = 0f;
+                if (flat.sqrMagnitude < 1e-6f) return;
+            }
+            flat.Normalize();
+            float pitch = Mathf.Clamp(Mathf.Asin(Mathf.Clamp(dir.y, -1f, 1f)) * Mathf.Rad2Deg, -maxPitchDegrees, maxPitchDegrees);
+            dir = Quaternion.AngleAxis(-pitch, Vector3.Cross(Vector3.up, flat)) * flat;
+        }
+
+        Quaternion look = Quaternion.LookRotation(dir, Vector3.up);
         transform.rotation = Quaternion.Slerp(transform.rotation, look, 1f - Mathf.Exp(-turnSmoothing * Time.deltaTime));
     }
 
@@ -291,27 +343,55 @@ public class HeronFlight : MonoBehaviour
         {
             // Wait for the landing clip to finish (the controller exits landing -> idle on its own).
             yield return null;
+            float nextLog = 0f;
             while (animator.GetCurrentAnimatorStateInfo(0).IsName(landingState) || animator.IsInTransition(0))
+            {
+                if (logIdleCountdown && Time.time >= nextLog)
+                {
+                    nextLog = Time.time + 0.5f;
+                    var st = animator.GetCurrentAnimatorStateInfo(0);
+                    Phase($"Land: waiting for '{landingState}' clip to finish (isLanding={st.IsName(landingState)} " +
+                          $"normalizedTime={st.normalizedTime:F2} inTransition={animator.IsInTransition(0)} " +
+                          $"next={(animator.IsInTransition(0) ? animator.GetNextAnimatorStateInfo(0).shortNameHash : 0)})");
+                }
                 yield return null;
+            }
+            Phase("Land: landing clip finished");
         }
         else
         {
             animator.CrossFadeInFixedTime(idleState, crossFade);
         }
 
+        if (waterLeadTime < 0f)
+        {
+            Phase($"Land: waiting {-waterLeadTime:F2}s (negative waterLeadTime) before water");
+            yield return new WaitForSeconds(-waterLeadTime);
+        }
         StartWater();   // no-op if the approach already started it
         onLanded.Invoke();
+        Phase($"Land: water started, onLanded invoked, settling for {settleTime:F2}s (heronFeet={(heronFeet != null ? heronFeet.name : "null")})");
 
-        // Nudge the root so heronFeet ends exactly on the landing point.
+        // Nudge the root so heronFeet ends exactly on the landing point. The correction runs in
+        // LateUpdate (after the animator has posed the feet). WaitForEndOfFrame is deliberately
+        // avoided: it never fires while the Game view isn't rendering, which hung the sequence.
         if (heronFeet != null && settleTime > 0f)
         {
-            for (float time = 0f; time < settleTime; time += Time.deltaTime)
-            {
-                yield return new WaitForEndOfFrame(); // feet reflect this frame's pose
-                Vector3 error = landPoint - heronFeet.position;
-                transform.position += error * Mathf.Clamp01(Time.deltaTime / Mathf.Max(settleTime - time, Time.deltaTime));
-            }
+            settleRemaining = settleTime;
+            while (settleRemaining > 0f)
+                yield return null;
         }
+        Phase("Land: settle finished");
+    }
+
+    float settleRemaining;
+
+    void LateUpdate()
+    {
+        if (settleRemaining <= 0f || heronFeet == null) return;
+        Vector3 error = landPoint - heronFeet.position;
+        transform.position += error * Mathf.Clamp01(Time.deltaTime / Mathf.Max(settleRemaining, Time.deltaTime));
+        settleRemaining -= Time.deltaTime;
     }
 
     IEnumerator IdleThenEat()
@@ -321,7 +401,14 @@ public class HeronFlight : MonoBehaviour
 
         for (int i = 0; i < Mathf.Max(eatCycles, 1); i++)
         {
-            yield return new WaitForSeconds(idleDuration);
+            idleCycle = i + 1;
+            idleTimeLeft = idleDuration;
+            while (idleTimeLeft > 0f)
+            {
+                yield return null;
+                idleTimeLeft -= Time.deltaTime;
+            }
+            idleTimeLeft = -1f;
             animator.CrossFadeInFixedTime(eatState, crossFade);
 
             // eat -> idle happens automatically in the controller when the clip ends.
@@ -347,7 +434,7 @@ public class HeronFlight : MonoBehaviour
             Vector3 before = transform.position;
             transform.position += bankedRootMotion;
             bankedRootMotion = Vector3.zero;
-            FaceMovement(before, transform.position);
+            FaceMovement(before, transform.position, takeoffMaxPitch);
 
             var state = animator.GetCurrentAnimatorStateInfo(0);
             if (state.IsName(takeoffState))
@@ -375,10 +462,12 @@ public class HeronFlight : MonoBehaviour
         if (ahead.sqrMagnitude < 0.0001f) ahead = (end - start).normalized;
         ahead.Normalize();
 
+        Vector3 toTarget = (end - start).normalized;
+        Vector3 exitSide = ExitSide(start, end);
         p0 = start;
         p3 = end;
-        p1 = p0 + ahead * dist * flyAwayForwardStretch + Vector3.up * flyAwayClimb;
-        p2 = p3 - (end - start).normalized * dist * flyAwayApproachStretch;
+        p1 = p0 + ahead * dist * flyAwayForwardStretch + Vector3.up * flyAwayClimb + exitSide * flyAwaySideCurve;
+        p2 = p3 - toTarget * dist * flyAwayApproachStretch + exitSide * flyAwaySideCurveEnd;
         useGeneratedPath = true;   // the flight path spline describes the arrival, not the exit
         BuildArcTable();
 
@@ -409,7 +498,7 @@ public class HeronFlight : MonoBehaviour
 
             Vector3 before = transform.position;
             transform.position = Vector3.Lerp(rootMotionPos, pathPos, w);
-            FaceMovement(before, transform.position);
+            FaceMovement(before, transform.position, Mathf.Lerp(takeoffMaxPitch, 90f, w));
 
             if (!takeoffDone && time > 0f &&
                 !animator.GetCurrentAnimatorStateInfo(0).IsName(takeoffState) && !animator.IsInTransition(0))
@@ -427,6 +516,15 @@ public class HeronFlight : MonoBehaviour
     }
 
     bool UseSpline => !useGeneratedPath && flightPath != null && flightPath.Count >= 2;
+
+    /// <summary>Horizontal "right" of the straight line from the exit start to the target.</summary>
+    static Vector3 ExitSide(Vector3 start, Vector3 end)
+    {
+        Vector3 flat = end - start;
+        flat.y = 0f;
+        if (flat.sqrMagnitude < 0.0001f) return Vector3.right;
+        return Vector3.Cross(Vector3.up, flat.normalized);
+    }
 
     Vector3 Bezier(float t)
     {
@@ -510,6 +608,37 @@ public class HeronFlight : MonoBehaviour
         }
         Gizmos.color = Color.yellow;
         Gizmos.DrawWireSphere(landPoint, 0.05f);
+
+        // Exit curve preview. At runtime the exit starts wherever the takeoff clip's root motion
+        // leaves the heron, so this is drawn from the landing spot facing the landing direction:
+        // same shape, just anchored a little earlier than the real thing.
+        if (Application.isPlaying) return;   // in play mode the cyan curve above becomes the exit path once FlyAway runs
+        if (heronFlyAwayTarget == null) heronFlyAwayTarget = FindTransform("HeronFlyAwayTarget");
+        if (heronFlyAwayTarget == null) return;
+
+        Vector3 exitStart = p3;
+        Vector3 exitEnd = heronFlyAwayTarget.position;
+        float exitDist = Vector3.Distance(exitStart, exitEnd);
+        Vector3 ahead = landRotation * Vector3.forward;
+        ahead.y = 0f;
+        if (ahead.sqrMagnitude < 0.0001f) ahead = (exitEnd - exitStart).normalized;
+        ahead.Normalize();
+        Vector3 exitSide = ExitSide(exitStart, exitEnd);
+        Vector3 e0 = exitStart;
+        Vector3 e3 = exitEnd;
+        Vector3 e1 = e0 + ahead * exitDist * flyAwayForwardStretch + Vector3.up * flyAwayClimb + exitSide * flyAwaySideCurve;
+        Vector3 e2 = e3 - (exitEnd - exitStart).normalized * exitDist * flyAwayApproachStretch + exitSide * flyAwaySideCurveEnd;
+
+        Gizmos.color = new Color(1f, 0.5f, 0f);   // orange
+        prev = e0;
+        for (int i = 1; i <= 40; i++)
+        {
+            float t = i / 40f, u = 1f - t;
+            Vector3 pt = u * u * u * e0 + 3f * u * u * t * e1 + 3f * u * t * t * e2 + t * t * t * e3;
+            Gizmos.DrawLine(prev, pt);
+            prev = pt;
+        }
+        Gizmos.DrawWireSphere(exitEnd, 0.05f);
     }
 #endif
 }

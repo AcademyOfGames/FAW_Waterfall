@@ -35,7 +35,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     [SerializeField] private Color nearestExperienceNameColor = new Color32(0x2E, 0x8B, 0xFF, 0xFF);
 
     [Header("Debug / testing — force geofence")]
-    [Tooltip("Pretend GPS is at this experience's lat/lon. If more than one is checked, the first in list order below wins (Benaroya → Alina → Divine → Water Lines).")]
+    [Tooltip("Pretend GPS is at this experience's lat/lon. If more than one is checked, the first in list order below wins (Benaroya → Alina → Divine → Waterlines).")]
     [SerializeField] private bool forceBenaroyaGeofence;
     [FormerlySerializedAs("forceAtAlinaGeofence")]
     [SerializeField] private bool forceAlinaGeofence;
@@ -642,7 +642,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
                 "benaroyaScene" => forceBenaroyaGeofence,
                 "AlinaScene" => forceAlinaGeofence,
                 "DivineScene" => forceDivineSceneGeofence,
-                "WaterLines" => forceWaterLinesGeofence,
+                "devScene" => forceWaterLinesGeofence,
                 _ => false
             };
         }
@@ -674,7 +674,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
                     if (forceDivineSceneGeofence == value) return false;
                     forceDivineSceneGeofence = value;
                     return true;
-                case "WaterLines":
+                case "devScene":
                     if (forceWaterLinesGeofence == value) return false;
                     forceWaterLinesGeofence = value;
                     return true;
