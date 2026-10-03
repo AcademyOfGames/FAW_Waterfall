@@ -104,6 +104,36 @@ public class HeronFlight : MonoBehaviour
     Vector3 landPoint;
     Quaternion landRotation;
     Vector3 splineStartFix, splineEndFix;
+
+    // The path is authored in world space at build time, but the whole prefab can move afterwards
+    // (AR floor refinement, anchor drift). Everything cached above is therefore re-expressed each
+    // frame relative to the heron's parent, so the heron keeps landing on the rock wherever it goes.
+    Transform frame;
+    Matrix4x4 frameInverseAtBuild = Matrix4x4.identity;
+    Quaternion frameRotationAtBuild = Quaternion.identity;
+
+    void SnapshotFrame()
+    {
+        frame = transform.parent;
+        if (frame == null)
+        {
+            frameInverseAtBuild = Matrix4x4.identity;
+            frameRotationAtBuild = Quaternion.identity;
+            return;
+        }
+        frameInverseAtBuild = frame.worldToLocalMatrix;
+        frameRotationAtBuild = frame.rotation;
+    }
+
+    /// <summary>A world point captured at build time, moved to where the prefab is now.</summary>
+    Vector3 Now(Vector3 worldAtBuild) =>
+        frame == null ? worldAtBuild : frame.localToWorldMatrix.MultiplyPoint3x4(frameInverseAtBuild.MultiplyPoint3x4(worldAtBuild));
+
+    Vector3 NowDir(Vector3 worldDirAtBuild) =>
+        frame == null ? worldDirAtBuild : frame.localToWorldMatrix.MultiplyVector(frameInverseAtBuild.MultiplyVector(worldDirAtBuild));
+
+    Quaternion NowRot(Quaternion worldRotAtBuild) =>
+        frame == null ? worldRotAtBuild : frame.rotation * Quaternion.Inverse(frameRotationAtBuild) * worldRotAtBuild;
     bool useGeneratedPath;     // set while flying away, so the arrival spline is ignored
 
     const int ArcSamples = 64;
@@ -143,7 +173,7 @@ public class HeronFlight : MonoBehaviour
 
         BuildPath();
 
-        transform.SetPositionAndRotation(p0, Quaternion.LookRotation(Tangent(0f)));
+        transform.SetPositionAndRotation(Now(p0), Quaternion.LookRotation(Tangent(0f)));
 
         if (startDelay > 0f)
         {
@@ -227,6 +257,7 @@ public class HeronFlight : MonoBehaviour
 
     void BuildPath()
     {
+        SnapshotFrame();
         landPoint = heronEnd.position;
         if (groundMask.value != 0 &&
             Physics.Raycast(heronEnd.position + Vector3.up * 2f, Vector3.down, out var hit, 10f, groundMask, QueryTriggerInteraction.Ignore))
@@ -312,7 +343,7 @@ public class HeronFlight : MonoBehaviour
             // Z forward points along the flight direction, leveling out for touchdown.
             Quaternion look = Quaternion.LookRotation(Tangent(t), Vector3.up);
             float level = levelOutPortion > 0f ? Mathf.InverseLerp(1f - levelOutPortion, 1f, s) : 0f;
-            Quaternion target = Quaternion.Slerp(look, landRotation, level);
+            Quaternion target = Quaternion.Slerp(look, NowRot(landRotation), level);
             transform.rotation = Quaternion.Slerp(transform.rotation, target, 1f - Mathf.Exp(-turnSmoothing * Time.deltaTime));
 
             if (playLandingAnimation && !landingStarted && duration - time <= landingLeadTime)
@@ -323,7 +354,7 @@ public class HeronFlight : MonoBehaviour
             yield return null;
         }
 
-        transform.SetPositionAndRotation(p3, landRotation);
+        transform.SetPositionAndRotation(Now(p3), NowRot(landRotation));
         if (playLandingAnimation && !landingStarted)
             animator.CrossFadeInFixedTime(landingState, crossFade);
     }
@@ -389,7 +420,7 @@ public class HeronFlight : MonoBehaviour
     void LateUpdate()
     {
         if (settleRemaining <= 0f || heronFeet == null) return;
-        Vector3 error = landPoint - heronFeet.position;
+        Vector3 error = Now(landPoint) - heronFeet.position;
         transform.position += error * Mathf.Clamp01(Time.deltaTime / Mathf.Max(settleRemaining, Time.deltaTime));
         settleRemaining -= Time.deltaTime;
     }
@@ -464,6 +495,7 @@ public class HeronFlight : MonoBehaviour
 
         Vector3 toTarget = (end - start).normalized;
         Vector3 exitSide = ExitSide(start, end);
+        SnapshotFrame();
         p0 = start;
         p3 = end;
         p1 = p0 + ahead * dist * flyAwayForwardStretch + Vector3.up * flyAwayClimb + exitSide * flyAwaySideCurve;
@@ -511,7 +543,7 @@ public class HeronFlight : MonoBehaviour
         }
 
         bankTakeoffRootMotion = false;
-        transform.position = p3;
+        transform.position = Now(p3);
         if (deactivateOnFlyAway) gameObject.SetActive(false);
     }
 
@@ -532,10 +564,11 @@ public class HeronFlight : MonoBehaviour
         {
             // Keep the drawn shape, but ease the ends onto the start point and landing spot.
             float blend = Mathf.SmoothStep(0f, 1f, t);
-            return flightPath.GetPoint(t) + splineStartFix * (1f - blend) + splineEndFix * blend;
+            // The spline lives inside the prefab, so GetPoint is already current; only the fix-ups need moving.
+            return flightPath.GetPoint(t) + NowDir(splineStartFix) * (1f - blend) + NowDir(splineEndFix) * blend;
         }
         float u = 1f - t;
-        return u * u * u * p0 + 3f * u * u * t * p1 + 3f * u * t * t * p2 + t * t * t * p3;
+        return Now(u * u * u * p0 + 3f * u * u * t * p1 + 3f * u * t * t * p2 + t * t * t * p3);
     }
 
     Vector3 Tangent(float t)
@@ -547,7 +580,7 @@ public class HeronFlight : MonoBehaviour
             return delta.sqrMagnitude > 1e-8f ? delta.normalized : transform.forward;
         }
         float u = 1f - t;
-        Vector3 d = 3f * u * u * (p1 - p0) + 6f * u * t * (p2 - p1) + 3f * t * t * (p3 - p2);
+        Vector3 d = NowDir(3f * u * u * (p1 - p0) + 6f * u * t * (p2 - p1) + 3f * t * t * (p3 - p2));
         return d.sqrMagnitude > 1e-6f ? d.normalized : transform.forward;
     }
 
@@ -599,7 +632,7 @@ public class HeronFlight : MonoBehaviour
             BuildPath();
         }
         Gizmos.color = Color.cyan;
-        Vector3 prev = p0;
+        Vector3 prev = Now(p0);
         for (int i = 1; i <= 40; i++)
         {
             Vector3 pt = Bezier(i / 40f);

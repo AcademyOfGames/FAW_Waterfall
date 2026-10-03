@@ -1,5 +1,7 @@
 using Unity.XR.CoreUtils;
 using UnityEngine;
+using UnityEngine.EventSystems;
+using UnityEngine.InputSystem;
 using UnityEngine.XR.ARFoundation;
 using UnityEngine.XR.ARSubsystems;
 
@@ -37,6 +39,45 @@ public class ARPlaneContentAnchor : MonoBehaviour
              "from the XR Origin in the editor, rebuilt around where the phone actually is when the floor is found, " +
              "so it appears in front of the user the way it was laid out in the scene.")]
     [SerializeField] private bool placeRelativeToCamera = false;
+
+    [Header("Tap To Place")]
+    [Tooltip("Off: content is placed automatically as soon as a floor is found. On: nothing is placed until the user " +
+             "taps the screen. The content then appears on the floor at its authored offset from the camera, using " +
+             "where the phone was and which way it was facing at the moment of the tap. If no floor has been found " +
+             "yet, it keeps looking and places as soon as one is.")]
+    [SerializeField] private bool placeOnTap = false;
+    [Tooltip("Ignore taps that land on UI (buttons etc.).")]
+    [SerializeField] private bool ignoreTapsOnUI = true;
+
+    [Header("Tap To Place Guide")]
+    [Tooltip("Reference photo shown faded on screen until the user taps, so they can line the view up with it. " +
+             "Left empty, the texture named below is loaded from a Resources folder.")]
+    [SerializeField] private Texture2D alignGuideImage;
+    [Tooltip("Resources name used when no image is assigned above.")]
+    [SerializeField] private string alignGuideResourceName = "KingStreetStationAlignGuide";
+    [Tooltip("How see-through the reference photo is. 0 = invisible, 1 = solid.")]
+    [Range(0f, 1f)] [SerializeField] private float alignGuideOpacity = 0.5f;
+    [Tooltip("Width of the photo as a fraction of the screen width.")]
+    [Range(0.1f, 1f)] [SerializeField] private float alignGuideWidth = 0.85f;
+    [SerializeField] private string alignPrompt = "Align and tap to place";
+    [Tooltip("Shown after the tap while the floor has not been found yet. Leave empty for no message.")]
+    [SerializeField] private string findFloorPrompt = "Point at the ground";
+
+    /// <summary>Raised once, when the content is first placed.</summary>
+    public event System.Action Placed;
+
+    /// <summary>True once the content has been placed on the floor (by tap or automatically).</summary>
+    public bool IsPlaced => _anchored;
+
+    /// <summary>True while tap-to-place is on and the user has not tapped yet.</summary>
+    public bool WaitingForTap => placeOnTap && !_tapped && !_anchored;
+
+    /// <summary>True after the tap while the floor still has not been found, so nothing is placed yet.</summary>
+    public bool WaitingForFloor => placeOnTap && _tapped && !_anchored;
+
+    private bool _tapped;
+    private Vector3 _tapCameraPosition;
+    private Quaternion _tapHeading = Quaternion.identity;
 
     private bool _anchored;
     private bool _contentWasActive;
@@ -81,6 +122,17 @@ public class ARPlaneContentAnchor : MonoBehaviour
         }
     }
 
+    private void Start()
+    {
+        if (!placeOnTap)
+            return;
+
+        Texture2D guide = alignGuideImage;
+        if (guide == null && !string.IsNullOrEmpty(alignGuideResourceName))
+            guide = Resources.Load<Texture2D>(alignGuideResourceName);
+        AlignTapOverlay.Create(this, guide, alignGuideOpacity, alignGuideWidth, alignPrompt, findFloorPrompt);
+    }
+
     private void Update()
     {
         if (planeManager == null)
@@ -88,6 +140,25 @@ public class ARPlaneContentAnchor : MonoBehaviour
 
         if (!_anchored)
         {
+            if (placeOnTap)
+            {
+                if (!_tapped)
+                {
+                    if (!WasTappedThisFrame())
+                        return;
+
+                    // Freeze where the phone was and which way it faced at the tap: that is the
+                    // alignment the user chose, even if the floor only shows up a moment later.
+                    _tapped = true;
+                    CaptureCameraPose(out _tapCameraPosition, out _tapHeading);
+                }
+
+                // Never place without a real floor: keep looking every frame until one is found.
+                if (TrySelectBestFloorPlane(planeManager.trackables, out ARPlane tapPlane))
+                    AnchorContentToPlane(tapPlane);
+                return;
+            }
+
             if (TrySelectBestFloorPlane(planeManager.trackables, out ARPlane plane))
                 AnchorContentToPlane(plane);
             return;
@@ -139,11 +210,16 @@ public class ARPlaneContentAnchor : MonoBehaviour
         if (contentRoot == null || anchorManager == null)
             return;
 
-        Pose anchorPose = placeRelativeToCamera
-            ? GetCameraRelativePose(plane)
+        // Tap-to-place always uses the camera-relative layout; that is the whole point of aligning first.
+        Pose anchorPose = placeRelativeToCamera || placeOnTap
+            ? GetCameraRelativePose(GetPlaneCenterWorld(plane).y)
             : new Pose(GetPlaneCenterWorld(plane), plane.transform.rotation);
 
-        ARAnchor anchor = CreateAnchor(plane, anchorPose);
+        FinishPlacement(CreateAnchor(plane, anchorPose), GetPlaneCenterWorld(plane).y);
+    }
+
+    private void FinishPlacement(ARAnchor anchor, float floorY)
+    {
         if (anchor == null)
             return;
 
@@ -157,9 +233,10 @@ public class ARPlaneContentAnchor : MonoBehaviour
             contentRoot.gameObject.SetActive(true);
 
         _currentAnchor = anchor;
-        _currentFloorY = GetPlaneCenterWorld(plane).y;
+        _currentFloorY = floorY;
         _nextRefineTime = Time.time + refineCooldownSeconds;
         _anchored = true;
+        Placed?.Invoke();
     }
 
     /// <summary>
@@ -207,30 +284,72 @@ public class ARPlaneContentAnchor : MonoBehaviour
     /// The authored offset from the rig, re-based onto the phone's current ground position and
     /// compass-free heading, with height taken from the detected floor.
     /// </summary>
-    private Pose GetCameraRelativePose(ARPlane plane)
+    private Pose GetCameraRelativePose(float floorY)
+    {
+        Vector3 camPosition;
+        Quaternion heading;
+        if (_tapped)
+        {
+            camPosition = _tapCameraPosition;
+            heading = _tapHeading;
+        }
+        else
+        {
+            CaptureCameraPose(out camPosition, out heading);
+        }
+
+        Vector3 flatOffset = new Vector3(_authoredLocalPosition.x, 0f, _authoredLocalPosition.z);
+        Vector3 position = new Vector3(camPosition.x, floorY, camPosition.z) + heading * flatOffset;
+        return new Pose(position, heading * _authoredLocalRotation);
+    }
+
+    /// <summary>Camera position plus its heading flattened onto the ground (tilting the phone must not tilt the world).</summary>
+    private void CaptureCameraPose(out Vector3 position, out Quaternion heading)
     {
         Camera cam = Camera.main;
         var origin = GetComponent<XROrigin>();
         if (origin != null && origin.Camera != null)
             cam = origin.Camera;
 
-        float floorY = GetPlaneCenterWorld(plane).y;
-        if (cam == null)
-            return new Pose(GetPlaneCenterWorld(plane), plane.transform.rotation);
+        Transform t = cam != null ? cam.transform : _originTransform;
+        position = t.position;
 
-        // Heading only: tilting the phone must not tilt the world.
-        Vector3 forward = cam.transform.forward;
+        Vector3 forward = t.forward;
         forward.y = 0f;
         if (forward.sqrMagnitude < 0.0001f)
         {
-            forward = cam.transform.up;
+            // Pointing straight up or down: the top of the phone still gives a usable heading.
+            forward = t.forward.y > 0f ? -t.up : t.up;
             forward.y = 0f;
         }
-        Quaternion heading = Quaternion.LookRotation(forward.normalized, Vector3.up);
+        heading = forward.sqrMagnitude < 0.0001f ? Quaternion.identity : Quaternion.LookRotation(forward.normalized, Vector3.up);
+    }
 
-        Vector3 flatOffset = new Vector3(_authoredLocalPosition.x, 0f, _authoredLocalPosition.z);
-        Vector3 position = new Vector3(cam.transform.position.x, floorY, cam.transform.position.z) + heading * flatOffset;
-        return new Pose(position, heading * _authoredLocalRotation);
+    private bool WasTappedThisFrame()
+    {
+        int pointerId = -1;
+        bool tapped = false;
+
+        var touchscreen = Touchscreen.current;
+        if (touchscreen != null && touchscreen.primaryTouch.press.wasPressedThisFrame)
+        {
+            pointerId = touchscreen.primaryTouch.touchId.ReadValue();
+            tapped = true;
+        }
+        else
+        {
+            var mouse = Mouse.current;
+            if (mouse != null && mouse.leftButton.wasPressedThisFrame)
+                tapped = true;
+        }
+
+        if (!tapped)
+            return false;
+
+        if (ignoreTapsOnUI && EventSystem.current != null && EventSystem.current.IsPointerOverGameObject(pointerId))
+            return false;
+
+        return true;
     }
 
     private static Vector3 GetPlaneCenterWorld(ARPlane plane)

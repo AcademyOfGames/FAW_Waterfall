@@ -17,7 +17,7 @@ Material:
   m_LightmapFlags: 4
   m_EnableInstancingVariants: 0
   m_DoubleSidedGI: 0
-  m_CustomRenderQueue: 2000
+  m_CustomRenderQueue: 3000
   stringTagMap: {}
   disabledShaderPasses:
   - MOTIONVECTORS
@@ -136,14 +136,15 @@ Material:
     - _ZWrite: 1
     - _puddleOffset: 0.22
     - _puddleSize: 0.53
-    - _waterFill: 5
+    - _waterFill: 0.51
     - _waterSpeed: -0.1
     m_Colors:
     - _BaseColor: {r: 0.2264151, g: 0.2264151, b: 0.2264151, a: 1}
-    - _Color: {r: 0.5943396, g: 0.5943396, b: 0.5943396, a: 1}
+    - _Color: {r: 0.59607846, g: 0.59607846, b: 0.59607846, a: 1}
     - _EmissionColor: {r: 0, g: 0, b: 0, a: 1}
     - _SpecColor: {r: 0.2, g: 0.2, b: 0.2, a: 1}
     - _TilingXY: {r: 19.7, g: 4.53, b: 0, a: 0}
+    - _WaterColor: {r: 0.6554379, g: 0.75661826, b: 0.9716981, a: 0}
     - _tiling: {r: 20.66, g: 5, b: 0, a: 0}
   m_BuildTextureStacks: []
 --- !u!114 &1958560860040809044
