@@ -152,6 +152,7 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
     private void OnDisable()
     {
         SceneManager.sceneLoaded -= HandleSceneLoadedForScreenRecord;
+        UnsubscribePendingPlacement();
     }
 
     private void OnDestroy()
@@ -177,12 +178,49 @@ public class GeofenceExperienceCoordinator : MonoBehaviour
         return true;
     }
 
+    private ARPlaneContentAnchor _pendingPlacementAnchor;
+
     private void UpdateScreenRecordUiForScene(string sceneName)
     {
         if (screenRecordUiRoot == null)
             return;
 
-        screenRecordUiRoot.SetActive(IsExperienceScene(sceneName));
+        UnsubscribePendingPlacement();
+
+        bool show = IsExperienceScene(sceneName);
+
+        // In scenes where the art is placed on the floor (tap-to-place or automatic), keep the
+        // record button hidden until the placement has actually happened.
+        if (show)
+        {
+            var anchor = FindFirstObjectByType<ARPlaneContentAnchor>();
+            if (anchor != null && !anchor.IsPlaced)
+            {
+                show = false;
+                _pendingPlacementAnchor = anchor;
+                anchor.Placed += HandleContentPlaced;
+                GeoDebug($"Record button hidden until content is placed in '{sceneName}'.");
+            }
+        }
+
+        screenRecordUiRoot.SetActive(show);
+    }
+
+    private void HandleContentPlaced()
+    {
+        UnsubscribePendingPlacement();
+        if (screenRecordUiRoot != null && IsExperienceScene(SceneManager.GetActiveScene().name))
+        {
+            screenRecordUiRoot.SetActive(true);
+            GeoDebug("Content placed: record button shown.");
+        }
+    }
+
+    private void UnsubscribePendingPlacement()
+    {
+        if (_pendingPlacementAnchor != null)
+            _pendingPlacementAnchor.Placed -= HandleContentPlaced;
+        _pendingPlacementAnchor = null;
     }
 
     private GameObject FindScreenRecordCanvasRoot()

@@ -20,6 +20,13 @@ public class PlayAnimationOnTap : MonoBehaviour
     [Tooltip("Also replay the animation when the screen is tapped.")]
     [SerializeField] private bool playOnTap = false;
 
+    [Tooltip("Switch this GameObject off when the scene starts and switch it back on the moment the animation is " +
+             "triggered by another script (e.g. the heron landing). Leave the object ACTIVE in the scene; this script " +
+             "hides it. While hidden, Play On Start and Play On Tap can't fire, so something must call Play().")]
+    [SerializeField] private bool startDisabled = true;
+
+    private bool triggered;
+
     [Header("Linked Animations")]
     [Tooltip("Other Animators to start at the same moment as this one (e.g. waterlinesSandWater). Each is held on the " +
              "first frame of its default state until then.")]
@@ -65,6 +72,12 @@ public class PlayAnimationOnTap : MonoBehaviour
             if (alsoPlay[i] == null) continue;
             alsoPlaySpeeds[i] = Mathf.Approximately(alsoPlay[i].speed, 0f) ? 1f : alsoPlay[i].speed;
             alsoPlay[i].speed = 0f;
+        }
+
+        // Hide until triggered. Skipped when Awake is running because Play() just activated us.
+        if (startDisabled && !triggered)
+        {
+            gameObject.SetActive(false);
         }
     }
 
@@ -120,6 +133,13 @@ public class PlayAnimationOnTap : MonoBehaviour
     /// <summary>Plays the animation from the beginning. Call this from other scripts to trigger it.</summary>
     public void Play()
     {
+        // Enable first: the Animator and the audio fade coroutine both need an active object.
+        triggered = true;
+        if (!gameObject.activeSelf)
+        {
+            gameObject.SetActive(true);
+        }
+
         if (animator != null)
         {
             animator.Play(stateName, layer, 0f);
