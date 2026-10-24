@@ -2613,7 +2613,7 @@ PrefabInstance:
         type: 3}
       propertyPath: alsoPlay.Array.data[0]
       value: 
-      objectReference: {fileID: 0}
+      objectReference: {fileID: 1883037683}
     - target: {fileID: 3174765770740238821, guid: e3df3843631c22e4c99e9617b7dbdc67,
         type: 3}
       propertyPath: m_LocalEulerAnglesHint.x
@@ -3172,7 +3172,7 @@ PrefabInstance:
     - target: {fileID: 4646376485031555012, guid: e3df3843631c22e4c99e9617b7dbdc67,
         type: 3}
       propertyPath: logIdleCountdown
-      value: 0
+      value: 1
       objectReference: {fileID: 0}
     - target: {fileID: 4646376485031555012, guid: e3df3843631c22e4c99e9617b7dbdc67,
         type: 3}

@@ -46,8 +46,46 @@ public class PlayAnimationOnTap : MonoBehaviour
     [SerializeField] private float fadeInSeconds = 2f;
     [Tooltip("Seconds to wait after the animation starts before the fade begins.")]
     [SerializeField] private float audioDelaySeconds = 0f;
+    [Tooltip("Volume the water audio settles at while the water is OUT (animation reversed), so the bird calls carry.")]
+    [Range(0f, 1f)] [SerializeField] private float outVolume = 0.15f;
+    [Tooltip("Seconds to lerp between Max Volume and Out Volume when the tide turns.")]
+    [SerializeField] private float tideFadeSeconds = 10f;
+
+    [Header("Wave Scroll")]
+    [Tooltip("Drive the water material's scroll direction with the tide: negative while the water comes in, " +
+             "positive (the material's starting value) while it goes out.")]
+    [SerializeField] private bool reverseScrollWhenRewinding = true;
+    [Tooltip("Seconds to lerp the scroll from the incoming direction back to the outgoing one when the tide turns.")]
+    [SerializeField] private float scrollFlipSeconds = 5f;
+    [Tooltip("Shader reference name of the scroll clock the script feeds every frame. The water shader's normal-map " +
+             "drift reads this instead of the global time, so the direction can change without the texture jumping.")]
+    [SerializeField] private string scrollTimeProperty = "_ScrollTime";
 
     private Coroutine fadeRoutine;
+    private bool reversing;
+    private readonly System.Collections.Generic.List<Material> scrollMaterials = new System.Collections.Generic.List<Material>();
+    private float scrollTime;          // the clock handed to the shader
+    private float scrollDirection = 1f; // +1 scene start / tide out, -1 tide in
+    private Coroutine scrollRoutine;
+
+    /// <summary>True while the animation is playing backwards (tide going out).</summary>
+    public bool IsReversing => reversing;
+
+    /// <summary>
+    /// True once the current playback has reached its end: the last frame when playing forward,
+    /// the first frame when playing in reverse. False before Play()/PlayReverse() has been called.
+    /// </summary>
+    public bool IsFinished
+    {
+        get
+        {
+            if (!triggered || animator == null || !animator.isActiveAndEnabled) return false;
+            var info = animator.GetCurrentAnimatorStateInfo(layer);
+            if (reversing)
+                return HasDirectionParameter(animator) ? info.normalizedTime <= 0.001f : reverseFinished;
+            return info.normalizedTime >= 1f;
+        }
+    }
 
     private void Awake()
     {
@@ -63,6 +101,18 @@ public class PlayAnimationOnTap : MonoBehaviour
         {
             audioSource.playOnAwake = false;
             audioSource.volume = 0f;
+        }
+
+        // Every renderer in the prefab whose material has the scroll clock (the water plane and the
+        // sand puddles share the shader). Materials are instanced so the assets are never modified.
+        if (!string.IsNullOrEmpty(scrollTimeProperty))
+        {
+            Transform root = transform.parent != null ? transform.parent : transform;
+            foreach (var r in root.GetComponentsInChildren<Renderer>(true))
+            {
+                if (r.sharedMaterial != null && r.sharedMaterial.HasProperty(scrollTimeProperty))
+                    scrollMaterials.Add(r.material);
+            }
         }
 
         // Freeze the linked animators on their first frame until the water starts.
@@ -88,7 +138,8 @@ public class PlayAnimationOnTap : MonoBehaviour
         {
             var linked = alsoPlay[i];
             if (linked == null || !linked.isActiveAndEnabled) continue;
-            linked.speed = alsoPlaySpeeds[i];
+            linked.speed = Mathf.Abs(alsoPlaySpeeds[i]);
+            SetDirection(linked, 1f);
             string requested = alsoPlayStates != null && i < alsoPlayStates.Length ? alsoPlayStates[i] : null;
             linked.Play(ResolveLinkedState(linked, requested), 0, 0f);
         }
@@ -140,12 +191,211 @@ public class PlayAnimationOnTap : MonoBehaviour
             gameObject.SetActive(true);
         }
 
+        reversing = false;
+        reverseFinished = false;
+        if (reverseRoutine != null) { StopCoroutine(reverseRoutine); reverseRoutine = null; }
         if (animator != null)
         {
+            animator.speed = 1f;
+            SetDirection(animator, 1f);
             animator.Play(stateName, layer, 0f);
         }
         PlayLinked();
+        ApplyScrollDirection();
         StartAudioFade();
+    }
+
+    /// <summary>
+    /// Plays the animation backwards from its last frame (tide going out), reverses the linked
+    /// animations and the wave scroll, and lerps the audio down to Out Volume.
+    /// </summary>
+    public void PlayReverse()
+    {
+        triggered = true;
+        if (!gameObject.activeSelf)
+        {
+            gameObject.SetActive(true);
+        }
+
+        reversing = true;
+        reverseFinished = false;
+        if (reverseRoutine != null) { StopCoroutine(reverseRoutine); reverseRoutine = null; }
+        Debug.Log($"PlayAnimationOnTap: PlayReverse on '{name}' (state '{stateName}')", this);
+
+        // Preferred path: the controller's "Direction" float drives the state's speed multiplier,
+        // which Mecanim honours when negative. Falls back to scrubbing for controllers without it.
+        bool scrubNeeded = false;
+        if (animator != null)
+        {
+            if (HasDirectionParameter(animator))
+            {
+                animator.speed = 1f;
+                SetDirection(animator, -1f);
+                animator.Play(stateName, layer, 1f);
+            }
+            else scrubNeeded = true;
+        }
+        if (alsoPlay != null)
+        {
+            for (int i = 0; i < alsoPlay.Length; i++)
+            {
+                var linked = alsoPlay[i];
+                if (linked == null || !linked.isActiveAndEnabled) continue;
+                if (HasDirectionParameter(linked))
+                {
+                    string requested = alsoPlayStates != null && i < alsoPlayStates.Length ? alsoPlayStates[i] : null;
+                    linked.speed = alsoPlaySpeeds != null && i < alsoPlaySpeeds.Length ? Mathf.Abs(alsoPlaySpeeds[i]) : 1f;
+                    SetDirection(linked, -1f);
+                    linked.Play(ResolveLinkedState(linked, requested), 0, 1f);
+                }
+                else scrubNeeded = true;
+            }
+        }
+        if (scrubNeeded)
+        {
+            Debug.LogWarning("PlayAnimationOnTap: a controller has no 'Direction' parameter; using frame-by-frame scrub for it.", this);
+            reverseRoutine = StartCoroutine(ReverseScrub());
+        }
+
+        ApplyScrollDirection();
+        FadeAudioTo(outVolume, tideFadeSeconds);
+    }
+
+    private static readonly int DirectionHash = Animator.StringToHash("Direction");
+
+    private static bool HasDirectionParameter(Animator anim)
+    {
+        if (anim == null || anim.runtimeAnimatorController == null) return false;
+        foreach (var prm in anim.parameters)
+            if (prm.nameHash == DirectionHash && prm.type == AnimatorControllerParameterType.Float) return true;
+        return false;
+    }
+
+    private static void SetDirection(Animator anim, float direction)
+    {
+        if (HasDirectionParameter(anim)) anim.SetFloat(DirectionHash, direction);
+    }
+
+    private Coroutine reverseRoutine;
+    private bool reverseFinished;
+
+    /// <summary>
+    /// Mecanim ignores a negative Animator.speed, so reverse playback is done by hand: every
+    /// animator is frozen (speed 0) and re-posed each frame at a normalized time that counts
+    /// down from 1 to 0 over the clip's own length. Each linked clip rewinds at its own pace.
+    /// </summary>
+    private IEnumerator ReverseScrub()
+    {
+        var targets = new System.Collections.Generic.List<(Animator anim, int hash, int lay, float length, float t)>();
+
+        if (animator != null && !HasDirectionParameter(animator))
+        {
+            animator.speed = 0f;
+            animator.Play(stateName, layer, 1f);
+            targets.Add((animator, Animator.StringToHash(stateName), layer, 0f, 1f));
+        }
+        if (alsoPlay != null)
+        {
+            for (int i = 0; i < alsoPlay.Length; i++)
+            {
+                var linked = alsoPlay[i];
+                if (linked == null || !linked.isActiveAndEnabled || HasDirectionParameter(linked)) continue;
+                string requested = alsoPlayStates != null && i < alsoPlayStates.Length ? alsoPlayStates[i] : null;
+                int hash = ResolveLinkedState(linked, requested);
+                linked.speed = 0f;
+                linked.Play(hash, 0, 1f);
+                targets.Add((linked, hash, 0, 0f, 1f));
+            }
+        }
+
+        // Let the Play() calls take effect so the state lengths can be read.
+        yield return null;
+        for (int i = 0; i < targets.Count; i++)
+        {
+            var tg = targets[i];
+            float len = tg.anim.GetCurrentAnimatorStateInfo(tg.lay).length;
+            targets[i] = (tg.anim, tg.hash, tg.lay, Mathf.Max(len, 0.01f), 1f);
+        }
+
+        bool anyRunning = true;
+        while (anyRunning)
+        {
+            anyRunning = false;
+            for (int i = 0; i < targets.Count; i++)
+            {
+                var tg = targets[i];
+                if (tg.t <= 0f || tg.anim == null) continue;
+                tg.t = Mathf.Max(0f, tg.t - Time.deltaTime / tg.length);
+                if (tg.anim.isActiveAndEnabled)
+                    tg.anim.Play(tg.hash, tg.lay, tg.t);
+                targets[i] = tg;
+                if (tg.t > 0f) anyRunning = true;
+            }
+            yield return null;
+        }
+
+        reverseFinished = true;
+        reverseRoutine = null;
+    }
+
+    /// <summary>
+    /// Water coming in: the scroll clock runs backwards (direction -1) from the moment the animation
+    /// starts. Water going out: the direction lerps back to +1 over Scroll Flip Seconds. Because the
+    /// shader reads this clock rather than the global time, changing direction never makes the
+    /// texture jump; it just slows, stops, and drifts the other way.
+    /// </summary>
+    private void ApplyScrollDirection()
+    {
+        if (scrollMaterials.Count == 0 || !reverseScrollWhenRewinding) return;
+        if (scrollRoutine != null) StopCoroutine(scrollRoutine);
+
+        if (!reversing)
+        {
+            scrollDirection = -1f;
+            return;
+        }
+        scrollRoutine = StartCoroutine(LerpScrollDirection(1f, Mathf.Max(scrollFlipSeconds, 0f)));
+    }
+
+    private IEnumerator LerpScrollDirection(float target, float duration)
+    {
+        float from = scrollDirection;
+        for (float t = 0f; t < duration; t += Time.deltaTime)
+        {
+            scrollDirection = Mathf.Lerp(from, target, t / duration);
+            yield return null;
+        }
+        scrollDirection = target;
+        scrollRoutine = null;
+    }
+
+    private void LateUpdate()
+    {
+        if (scrollMaterials.Count == 0) return;
+        scrollTime += Time.deltaTime * scrollDirection;
+        for (int i = 0; i < scrollMaterials.Count; i++)
+            if (scrollMaterials[i] != null) scrollMaterials[i].SetFloat(scrollTimeProperty, scrollTime);
+    }
+
+    /// <summary>Lerps the water audio to a target volume over the given seconds.</summary>
+    public void FadeAudioTo(float target, float seconds)
+    {
+        if (audioSource == null) return;
+        if (fadeRoutine != null) StopCoroutine(fadeRoutine);
+        fadeRoutine = StartCoroutine(FadeTo(Mathf.Clamp01(target), Mathf.Max(seconds, 0f)));
+    }
+
+    private IEnumerator FadeTo(float target, float duration)
+    {
+        if (!audioSource.isPlaying) audioSource.Play();
+        float from = audioSource.volume;
+        for (float t = 0f; t < duration; t += Time.deltaTime)
+        {
+            audioSource.volume = Mathf.Lerp(from, target, t / duration);
+            yield return null;
+        }
+        audioSource.volume = target;
+        fadeRoutine = null;
     }
 
     /// <summary>Fades the audio from silent up to Max Volume, starting it if it isn't already playing.</summary>
@@ -158,16 +408,19 @@ public class PlayAnimationOnTap : MonoBehaviour
 
     private IEnumerator FadeIn()
     {
-        audioSource.volume = 0f;
-        if (audioDelaySeconds > 0f)
+        // First time: from silence after the optional delay. Later cycles: from wherever the
+        // tide-out fade left the volume, so the water swells back in rather than cutting out.
+        float from = audioSource.isPlaying ? audioSource.volume : 0f;
+        audioSource.volume = from;
+        if (!audioSource.isPlaying && audioDelaySeconds > 0f)
             yield return new WaitForSeconds(audioDelaySeconds);
 
         if (!audioSource.isPlaying) audioSource.Play();
 
-        float duration = Mathf.Max(fadeInSeconds, 0f);
+        float duration = Mathf.Max(audioSource.volume > 0f ? tideFadeSeconds : fadeInSeconds, 0f);
         for (float t = 0f; t < duration; t += Time.deltaTime)
         {
-            audioSource.volume = Mathf.Lerp(0f, maxVolume, t / duration);
+            audioSource.volume = Mathf.Lerp(from, maxVolume, t / duration);
             yield return null;
         }
         audioSource.volume = maxVolume;

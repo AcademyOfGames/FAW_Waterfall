@@ -98,6 +98,31 @@ public class HeronFlight : MonoBehaviour
     [Tooltip("Switch the heron off once it reaches the target.")]
     public bool deactivateOnFlyAway = true;
 
+    [Header("Repeat")]
+    [Tooltip("After flying away, wait and then fly in again, forever. Overrides Deactivate On Fly Away.")]
+    public bool loopSequence = true;
+    [Tooltip("Seconds the heron stays out of sight between flying away and flying back in.")]
+    public float repeatDelaySeconds = 8f;
+    [Tooltip("Seconds after the heron takes off before the water starts going back out. The tide-out no longer waits " +
+             "for the fly-away to finish.")]
+    public float tideOutAfterTakeoffSeconds = 5f;
+
+    bool tideOutStarted;
+
+    IEnumerator StartTideOutAfter(float seconds)
+    {
+        yield return new WaitForSeconds(seconds);
+        StartTideOut();
+    }
+
+    void StartTideOut()
+    {
+        if (tideOutStarted || waterAnimation == null || !waterPlaying) return;
+        tideOutStarted = true;
+        Phase("Tide out: playing water animation in reverse");
+        waterAnimation.PlayReverse();
+    }
+
     Animator animator;
     Vector3 localFeetOffset;   // feet position in heron local space, measured in the standing pose
     Vector3 p0, p1, p2, p3;    // bezier control points (root positions)
@@ -171,29 +196,63 @@ public class HeronFlight : MonoBehaviour
         animator.Update(0f);
         localFeetOffset = heronFeet != null ? transform.InverseTransformPoint(heronFeet.position) : Vector3.zero;
 
-        BuildPath();
-
-        transform.SetPositionAndRotation(Now(p0), Quaternion.LookRotation(Tangent(0f)));
-
-        if (startDelay > 0f)
+        float delay = startDelay;
+        while (true)
         {
-            SetVisible(false);
-            yield return new WaitForSeconds(startDelay);
-            SetVisible(true);
+            useGeneratedPath = false;   // arrive on the authored path again each time round
+            BuildPath();
+
+            transform.SetPositionAndRotation(Now(p0), Quaternion.LookRotation(Tangent(0f)));
+
+            if (delay > 0f)
+            {
+                SetVisible(false);
+                yield return new WaitForSeconds(delay);
+                SetVisible(true);
+            }
+            animator.Play(flyState, 0, 0f);
+
+            yield return Fly();
+            Phase("Fly finished, starting Land");
+            yield return Land();
+            Phase("Land finished, starting IdleThenEat");
+            yield return IdleThenEat();
+            Phase($"IdleThenEat finished (eatCycles={eatCycles}, flyAwayTarget={(heronFlyAwayTarget != null ? heronFlyAwayTarget.name : "null")})");
+
+            if (eatCycles > 0 && heronFlyAwayTarget != null)
+                yield return FlyAway();
+            else if (eatCycles > 0)
+                Debug.LogWarning("HeronFlight: heronFlyAwayTarget not assigned or found; staying on the rocks.", this);
+
+            Phase($"After fly-away: loopSequence={loopSequence} eatCycles={eatCycles} " +
+                  $"flyAwayTarget={(heronFlyAwayTarget != null ? heronFlyAwayTarget.name : "null")} " +
+                  $"waterAnimation={(waterAnimation != null ? waterAnimation.name : "null")} waterPlaying={waterPlaying}");
+
+            if (!loopSequence || eatCycles <= 0 || heronFlyAwayTarget == null)
+            {
+                Phase("Not looping: sequence ends here.");
+                yield break;
+            }
+
+            // Tide out: play the water animation backwards and wait until it is fully out
+            // before the heron comes back and brings the water in again.
+            if (waterAnimation == null || !waterPlaying)
+                Phase("Skipping tide-out: no water animation reference or the water never started.");
+            else
+            {
+                StartTideOut();   // normally already running since shortly after takeoff
+                SetVisible(false);
+                yield return null;
+                while (!waterAnimation.IsFinished)
+                    yield return null;
+                waterPlaying = false;   // let the next landing bring the water back in
+                tideOutStarted = false;
+                Phase("Water fully out");
+            }
+
+            Phase($"Sequence finished, repeating in {repeatDelaySeconds:F1}s");
+            delay = Mathf.Max(repeatDelaySeconds, 0.01f);
         }
-        animator.Play(flyState, 0, 0f);
-
-        yield return Fly();
-        Phase("Fly finished, starting Land");
-        yield return Land();
-        Phase("Land finished, starting IdleThenEat");
-        yield return IdleThenEat();
-        Phase($"IdleThenEat finished (eatCycles={eatCycles}, flyAwayTarget={(heronFlyAwayTarget != null ? heronFlyAwayTarget.name : "null")})");
-
-        if (eatCycles > 0 && heronFlyAwayTarget != null)
-            yield return FlyAway();
-        else if (eatCycles > 0)
-            Debug.LogWarning("HeronFlight: heronFlyAwayTarget not assigned or found; staying on the rocks.", this);
     }
 
     // The controller uses root-motion clips. Handling OnAnimatorMove keeps Unity from applying
@@ -363,8 +422,14 @@ public class HeronFlight : MonoBehaviour
 
     void StartWater()
     {
-        if (waterPlaying || waterAnimation == null) return;
+        if (waterPlaying) return;
+        if (waterAnimation == null)
+        {
+            Phase("StartWater: no PlayAnimationOnTap found; water will not start.");
+            return;
+        }
         waterPlaying = true;
+        Phase($"StartWater: playing water on '{waterAnimation.name}'");
         waterAnimation.Play();
     }
 
@@ -455,6 +520,8 @@ public class HeronFlight : MonoBehaviour
 
         // Phase 1: the takeoff clip's own root motion moves the heron until the blend point.
         animator.CrossFadeInFixedTime(takeoffState, crossFade);
+        if (loopSequence && waterAnimation != null && waterPlaying)
+            StartCoroutine(StartTideOutAfter(Mathf.Max(tideOutAfterTakeoffSeconds, 0f)));
         bankTakeoffRootMotion = true;
         bankedRootMotion = Vector3.zero;
 
@@ -544,7 +611,7 @@ public class HeronFlight : MonoBehaviour
 
         bankTakeoffRootMotion = false;
         transform.position = Now(p3);
-        if (deactivateOnFlyAway) gameObject.SetActive(false);
+        if (deactivateOnFlyAway && !loopSequence) gameObject.SetActive(false);
     }
 
     bool UseSpline => !useGeneratedPath && flightPath != null && flightPath.Count >= 2;
