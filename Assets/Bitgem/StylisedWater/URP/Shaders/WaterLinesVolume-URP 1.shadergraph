@@ -74,6 +74,9 @@
         },
         {
             "m_Id": "df071c45ff6c497885f09405f2861689"
+        },
+        {
+            "m_Id": "aff646d246cb41e3a9e385fca45e293e"
         }
     ],
     "m_Keywords": [],
@@ -749,6 +752,9 @@
         },
         {
             "m_Id": "02af96353aab428cac795d6e74d30de4"
+        },
+        {
+            "m_Id": "a081dada41f6482dbb574a0fc4a6cc44"
         }
     ],
     "m_GroupDatas": [
@@ -1030,7 +1036,7 @@
         {
             "m_OutputSlot": {
                 "m_Node": {
-                    "m_Id": "0f5ac47c64fb388d83584dd909f90e45"
+                    "m_Id": "a081dada41f6482dbb574a0fc4a6cc44"
                 },
                 "m_SlotId": 0
             },
@@ -1044,7 +1050,7 @@
         {
             "m_OutputSlot": {
                 "m_Node": {
-                    "m_Id": "0f5ac47c64fb388d83584dd909f90e45"
+                    "m_Id": "a081dada41f6482dbb574a0fc4a6cc44"
                 },
                 "m_SlotId": 0
             },
@@ -2388,20 +2394,6 @@
         {
             "m_OutputSlot": {
                 "m_Node": {
-                    "m_Id": "762f02739edcad83b3fb85636ca990c9"
-                },
-                "m_SlotId": 2
-            },
-            "m_InputSlot": {
-                "m_Node": {
-                    "m_Id": "3aff931c93094df2a47b14103cabd1a4"
-                },
-                "m_SlotId": 0
-            }
-        },
-        {
-            "m_OutputSlot": {
-                "m_Node": {
                     "m_Id": "790dccf35778e58a99af8c306d10da8c"
                 },
                 "m_SlotId": 0
@@ -2507,6 +2499,20 @@
             "m_InputSlot": {
                 "m_Node": {
                     "m_Id": "818c78fd43d91f81bdb1e3b2f3eabde3"
+                },
+                "m_SlotId": 0
+            }
+        },
+        {
+            "m_OutputSlot": {
+                "m_Node": {
+                    "m_Id": "876d1108c3108d80abd88b934f7362cf"
+                },
+                "m_SlotId": 2
+            },
+            "m_InputSlot": {
+                "m_Node": {
+                    "m_Id": "3aff931c93094df2a47b14103cabd1a4"
                 },
                 "m_SlotId": 0
             }
@@ -26445,6 +26451,9 @@
         },
         {
             "m_Id": "df071c45ff6c497885f09405f2861689"
+        },
+        {
+            "m_Id": "aff646d246cb41e3a9e385fca45e293e"
         }
     ]
 }
@@ -30552,3 +30561,83 @@
     "m_Labels": []
 }
 
+{
+    "m_SGVersion": 1,
+    "m_Type": "UnityEditor.ShaderGraph.Internal.Vector1ShaderProperty",
+    "m_ObjectId": "aff646d246cb41e3a9e385fca45e293e",
+    "m_Guid": {
+        "m_GuidSerialized": "2da56b9b-8640-4b37-9b8f-89a5b8b9b089"
+    },
+    "m_Name": "ScrollTime",
+    "m_DefaultRefNameVersion": 0,
+    "m_RefNameGeneratedByDisplayName": "",
+    "m_DefaultReferenceName": "Vector1_ScrollTime",
+    "m_OverrideReferenceName": "_ScrollTime",
+    "m_GeneratePropertyBlock": true,
+    "m_UseCustomSlotLabel": false,
+    "m_CustomSlotLabel": "",
+    "m_DismissedVersion": 0,
+    "m_Precision": 0,
+    "overrideHLSLDeclaration": false,
+    "hlslDeclarationOverride": 0,
+    "m_Hidden": false,
+    "m_Value": 0.0,
+    "m_FloatType": 0,
+    "m_RangeValues": {
+        "x": 0.0,
+        "y": 1.0
+    }
+}
+
+{
+    "m_SGVersion": 0,
+    "m_Type": "UnityEditor.ShaderGraph.PropertyNode",
+    "m_ObjectId": "a081dada41f6482dbb574a0fc4a6cc44",
+    "m_Group": {
+        "m_Id": "304e3758a9d44b26a2ac5acbae7c7634"
+    },
+    "m_Name": "Property",
+    "m_DrawState": {
+        "m_Expanded": true,
+        "m_Position": {
+            "serializedVersion": "2",
+            "x": -5734.0,
+            "y": 706.9999084472656,
+            "width": 143.0,
+            "height": 34.0
+        }
+    },
+    "m_Slots": [
+        {
+            "m_Id": "410ec6dc23b24980b97e5ef3c6d2e1e4"
+        }
+    ],
+    "synonyms": [],
+    "m_Precision": 0,
+    "m_PreviewExpanded": true,
+    "m_DismissedVersion": 0,
+    "m_PreviewMode": 0,
+    "m_CustomColors": {
+        "m_SerializableColors": []
+    },
+    "m_Property": {
+        "m_Id": "aff646d246cb41e3a9e385fca45e293e"
+    }
+}
+
+{
+    "m_SGVersion": 0,
+    "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
+    "m_ObjectId": "410ec6dc23b24980b97e5ef3c6d2e1e4",
+    "m_Id": 0,
+    "m_DisplayName": "ScrollTime",
+    "m_SlotType": 1,
+    "m_Hidden": false,
+    "m_ShaderOutputName": "Out",
+    "m_StageCapability": 3,
+    "m_Value": 0.0,
+    "m_DefaultValue": 0.0,
+    "m_Labels": [
+        "X"
+    ]
+}

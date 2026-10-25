@@ -57,9 +57,10 @@ Material:
     - Vector1_B9F56378: 0.1
     - Vector1_C360A163: 2.7
     - Vector1_E5C51606: 0.76
-    - Vector1_F38B44AA: 0.23
+    - Vector1_F38B44AA: 2.01
     - _QueueControl: 0
     - _QueueOffset: 3
+    - _ScrollTime: 0
     - _WaterFill: 0
     - _WaveFrequency: 10
     - _WaveScale: 0.001

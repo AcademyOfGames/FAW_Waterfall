@@ -1957,7 +1957,7 @@ MonoBehaviour:
   m_OnCullStateChanged:
     m_PersistentCalls:
       m_Calls: []
-  m_text: Save to Phone
+  m_text: Save to Device
   m_isRightToLeft: 0
   m_fontAsset: {fileID: 11400000, guid: cd882822b2e783a4283200706fa7f105, type: 2}
   m_sharedMaterial: {fileID: 3593240893418791340, guid: cd882822b2e783a4283200706fa7f105,

@@ -141,7 +141,7 @@ PlayerSettings:
   loadStoreDebugModeEnabled: 0
   visionOSBundleVersion: 1.0
   tvOSBundleVersion: 1.0
-  bundleVersion: 2.4
+  bundleVersion: 2.6
   preloadedAssets:
   - {fileID: 0}
   - {fileID: -1523886337182523732, guid: 4ce52f3b88187134f8374d286a442d26, type: 2}
@@ -178,7 +178,7 @@ PlayerSettings:
     iPhone: 1
     tvOS: 0
   overrideDefaultApplicationIdentifier: 0
-  AndroidBundleVersionCode: 30
+  AndroidBundleVersionCode: 33
   AndroidMinSdkVersion: 35
   AndroidTargetSdkVersion: 0
   AndroidPreferredInstallLocation: 1
